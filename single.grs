@@ -1,0 +1,19 @@
+package p_1 {
+  rule r_1  { pattern { e:X -[L]-> Y   } commands { del_edge e; add_edge X -[L_1]-> Y  } }
+  rule r_11 { pattern { e:X -[L_1]-> Y } commands { del_edge e; add_edge X -[L_11]-> Y } }
+  rule r_12 { pattern { e:X -[L_1]-> Y } commands { del_edge e; add_edge X -[L_12]-> Y } }
+}
+
+package p_2 {
+  rule r_2  { pattern { e:X -[L]-> Y   } commands { del_edge e; add_edge X -[L_2]-> Y  } }
+  rule r_21 { pattern { e:X -[L_2]-> Y } commands { del_edge e; add_edge X -[L_21]-> Y } }
+  rule r_22 { pattern { e:X -[L_2]-> Y } commands { del_edge e; add_edge X -[L_22]-> Y } }
+}
+
+strat p_1_nfs { Iter (p_1) }  % all normal forms with package p_1
+strat p_1_onf { Onf (p_1) }   % one normal form with package p_1
+
+strat union { Alt (p_1,p_2) } % union of the two set of rules
+strat all_nfs { Iter (union)} % all normal forms
+
+strat s_1 { Seq (Pick(p_1), Pick(p_2), all_nfs) }

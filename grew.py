@@ -206,3 +206,14 @@ def run(grs_data, graph_data, strat="main"):
     except utils.GrewError as e:
         raise utils.GrewError(
             {"function": "grew.run", "strat": strat, "message": e.value})
+
+def json_grs(grs_index):
+    try:
+        req = {
+            "command": "json_grs",
+            "grs_index": grs_index,
+        }
+        return network.send_and_receive(req)
+    except utils.GrewError as e: 
+        raise utils.GrewError({"function": "grew.json_grs", "message":e.value})
+
