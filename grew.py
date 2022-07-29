@@ -144,43 +144,65 @@ def search(pattern, gr):
     except utils.GrewError as e: 
         raise utils.GrewError({"function": "grew.search", "message":e.value})
 
-def graph_svg(graph):
-    req = {
-        "command": "dep_to_svg",
-        "graph": json.dumps(graph),
-    }
-    return network.send_and_receive(req)
+class AST:
+    def __init__(self,json):
+        if len(json) > 1:
+            utils.GrewError("{json} is not a strategy")
+        for d,v in json.items():
+            self.label = d
+            self.children = v
+    def json(self):
+        print(f"{{ {self.label} : {self.children} }}")
+    
+class Strategy:
+    def __init__(self, json):
+        self.name = json["strat_name"]
+        self.data = AST(json["strat_def"])
 
-def json_grs(rs):
-    req = {
-        "command": "json_grs",
-        "grs_index": rs,
-    }
-    return network.send_and_receive(req)
+    def json(self):
+        return f"{{{self.name} : {self.data.json()} }}"
 
+class GRS():
 
-def grs(data):
-    """Load a grs stored in a file
-    :param data: either a file name or a Grew string representation of a grs
-    :return: an integer index for latter reference to the grs
-    :raise an error if the file was not correctly loaded
-    """
-    try:
-        if os.path.isfile(data):
-            req = {"command": "load_grs", "filename": data}
-            reply = network.send_and_receive(req)
-        else:
-            with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs") as f:
-                f.write(data)
-                f.seek(0)  # to be read by others
-                req = {"command": "load_grs", "filename": f.name}
+    def __init__(self,data):
+        """Load a grs stored in a file
+        :param data: either a file name or a Grew string representation of a grs
+        :return: an integer index for latter reference to the grs
+        :raise an error if the file was not correctly loaded
+        """
+        try:
+            if os.path.isfile(data):
+                req = {"command": "load_grs", "filename": data}
                 reply = network.send_and_receive(req)
-        return reply["index"]
-    except utils.GrewError as e:
-        raise utils.GrewError(
-            {"function": "grew.grs", "data": data, "message": e.value})
-
-
+            else:
+                with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs") as f:
+                    f.write(data)
+                    f.seek(0)  # to be read by others
+                    req = {"command": "load_grs", "filename": f.name}
+                    reply = network.send_and_receive(req)
+            self.index = reply["index"]
+            req = {"command": "json_grs","grs_index": self.index}
+            json = network.send_and_receive(req)
+            print(json)
+            self.filename = json["filename"]
+            self.strats = dict()
+            self.package = []
+            for d in json["decls"]:
+                if 'strat_name' in d:
+                    self.strats[d['strat_name']] = d['strat_def']
+                elif 'package_name' in d:
+                    self.package.append(d)
+                else:
+                    raise utils.GrewError(f"{d} is not part of a grs")
+        except utils.GrewError as e:
+            raise utils.GrewError(
+                {"function": "grew.GRS", "data": data, "message": e.value})
+        
+    def json(self):
+        sts = ", ".join([f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s,v in self.strats.items()])
+        pts = ", ".join([json.dumps(s) for s in self.package])
+        return f'{{"filename": "{self.filename}", "decl": [{sts}, {pts}]}}'
+'''
 def run(grs_data, graph_data, strat="main"):
     """
     Apply rs or the last loaded one to [gr]
@@ -206,14 +228,4 @@ def run(grs_data, graph_data, strat="main"):
     except utils.GrewError as e:
         raise utils.GrewError(
             {"function": "grew.run", "strat": strat, "message": e.value})
-
-def json_grs(grs_index):
-    try:
-        req = {
-            "command": "json_grs",
-            "grs_index": grs_index,
-        }
-        return network.send_and_receive(req)
-    except utils.GrewError as e: 
-        raise utils.GrewError({"function": "grew.json_grs", "message":e.value})
-
+'''

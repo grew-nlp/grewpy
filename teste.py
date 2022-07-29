@@ -12,3 +12,6 @@ for n in c[-1]:
 
 p = grew.Pattern("pattern {X[upos=VERB]}")
 print(len(c.search(p)))
+
+grs = grew.GRS("single.grs")
+print(grs.json())

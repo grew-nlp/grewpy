@@ -16,6 +16,14 @@ import network
 
 ''' interfaces'''
 
+
+def graph_svg(graph):
+    req = {
+        "command": "dep_to_svg",
+        "graph": json.dumps(graph),
+    }
+    return network.send_and_receive(req)
+
 def graph2dot(graph):
     """
     Transformation of a graph to a graphviz string
