@@ -16,65 +16,58 @@ import network
 
 ''' interfaces'''
 
-
-def graph_svg(graph):
-    req = {
-        "command": "dep_to_svg",
-        "graph": json.dumps(graph),
-    }
-    return network.send_and_receive(req)
-
-def graph2dot(graph):
+class Graph(dict):
     """
-    Transformation of a graph to a graphviz string
-    :param graph: a graph (dict)
-    :return: string
+    a dict mapping node keys to feature structure
+    with an extra dict mapping node keys to successors (pair of edge feature,node key)
     """
-    s = 'graph G{\n'
-    for n in graph:
-        s += '%s [label="%s"]\n' % (n, graph[n][0])
-    for n in graph:
-        for (nid, lab) in graph[n][1]:
-            s += '%s->%s[label="%s"]\n' % (n, nid, lab)
-    return s + '}'
-
-def graph(data=None):
-    """
-    :param data: either a list of string,
-                 or a string in GREW format
-                 or a filename in GREW format
-                 or another graph
-    :return: a graph
-   """
-    try:
-        if not data:
-            return dict()
-        if isinstance(data, list):
-            # builds a flat ordered (using list order) graph
-            return {float2id(float(i)): (data[i], []) for i in range(len(data))}
-        elif isinstance(data, str):
-            # build from a JSON string
+    def __init__(self,data=None):
+        """
+        :param data: either None=>empty graph
+        a string: a json representation => read json
+        a json-decoded representation => fill with json
+        an oterh graph => copy the dict 
+        :return: a graph
+        """
+        super().__init__()
+        self.edges = dict()
+        if data is None:
+            pass            
+        elif isinstance(data,str):
+            #either json or filename
             try:
-                return json.loads(data)
+                data = json.loads(data)
+                for name, val in data.items():
+                    self[name] = val[0]
+                    self.edges[name] = val[1]
             except json.decoder.JSONDecodeError:
-                if os.path.isfile(data):
-                    req = { "command": "load_graph", "filename": data }
-                    reply = network.send_and_receive(req)
-                else:
-                    with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".gr") as f:
-                        f.write(data)
-                        f.seek(0)  # to be read by others
-                        req = { "command": "load_graph", "filename": f.name }
-                        reply = network.send_and_receive(req)
-                return (reply)
-    
-        elif isinstance(data,dict):
-            # copy an existing graph
-            return copy.deepcopy(data)
-        else:
-            raise GrewError('Library call error')
-    except utils.GrewError as e: 
-        raise utils.GrewError({"function": "grew.graph", "data": data, "message":e.value})
+                pass
+        elif isinstance(data, Graph):
+            super().__init__(data)
+            self.edges = copy(data.edges)
+        elif isinstance(data, dict):
+            #supposed to be json decoded str
+            for name,val in data.items():
+                self[name] = val[0]
+                self.edges[name] = val[1]
+            for n,v in self.edges.items():
+                for e in v:
+                    assert len(e) == 2
+
+    def to_dot(self):
+        """
+        return a string in dot/graphviz format
+        """
+        s = 'digraph G{\n'
+        for n,fs in self.items():
+            s += f'{n}[label="'
+            label = ["%s:%s" % (f,v.replace('"','\\"')) for f, v in fs.items()]
+            s += ",".join(label)
+            s += '"];\n'
+        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.edges.items() for e,m in suc])
+        return s + '\n}'
+
+
 
 def save(gr, filename):
     req = { "command": "save_graph", "graph": json.dumps(gr), "filename": filename }
@@ -161,3 +154,39 @@ def dot_to_png(gr):
 def dep_to_png(gr):
     req = { "command": "dep_to_png", "graph": json.dumps(gr) }
     return network.send_and_receive(req)
+
+
+def search(pattern, gr):
+    """
+    Search for [pattern] into [gr]
+    :param patten: a string pattern
+    :param gr: the graph
+    :return: the list of matching of [pattern] into [gr]
+    """
+    try:
+        req = {
+            "command": "search",
+            "graph": json.dumps(gr),
+            "pattern": pattern
+        }
+        reply = network.send_and_receive(req)
+        return reply
+    except utils.GrewError as e:
+        raise utils.GrewError({"function": "grew.search", "message": e.value})
+
+
+def graph_svg(graph):
+    req = {
+        "command": "dep_to_svg",
+        "graph": json.dumps(graph),
+    }
+    return network.send_and_receive(req)
+
+
+def graph2dot(graph):
+    """
+    Transformation of a graph to a graphviz string
+    :param graph: a graph (dict)
+    :return: string
+    """
+
