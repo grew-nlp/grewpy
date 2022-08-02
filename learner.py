@@ -1,32 +1,15 @@
+from audioop import mul
 import grew
+from utils import multi_append
 
 c = grew.Corpus("UD_French-PUD/fr_pud-ud-test.conllu")
-
-def add_one(m,k):
-    #m is a multiset, m[k] ++
-    a = m.get(k,0)
-    m[k] = a+1
-
-def append(d, k, vs):
-    """
-    d map k to the multiset of v
-    vs is either a list of v or a v
-    append value v to d[k]
-    """
-    if k not in d:
-        d[k] = dict()
-    if isinstance(vs,list):
-        for v in vs:
-            add_one(d[k], v)
-    else:
-        add_one(d[k],vs)
 
 def pair(c,matching,e,n1,n2):#append the matching in e
     G = c[matching['sent_id']]
     P1 = G[matching['matching']['nodes'][n1]].get("upos", "")
     P2 = G[matching['matching']['nodes'][n2]].get("upos", "")
     if P1 and P2:
-        append(e, (P1, P2), str(matching['matching']['edges']['e']['label']))
+        multi_append(e, (P1, P2), str(matching['matching']['edges']['e']['label']))
 
 def cluster(c,P,n1,n2):
     obs = dict()
@@ -72,8 +55,29 @@ def rank0(c):
     return rules
 
 R0 = rank0(c)
-for r in R0:
-    print (r.json())
+gcs = {sid : c[sid] for sid in c}#set of graphs
+g0s = {sid : c[sid] for sid in c} #a copy of the graphs
+for sid,g in g0s.items():
+    for n in g:
+        g.edges[n]=[] #trash all edges in g0s
+
+def verify(gs,hs):
+    recall, found = 0,0
+    for sid,g in gs.items():
+        for n in g:
+            for e,s in g.edges[n]:
+                if (e,s) in hs[sid].edges[n]:
+                    found += 1
+                else:
+                    recall += 1
+    return found, recall
+
+print(verify(g0s,gcs))
+    
+GRS = grew.GRS()
+GRS.packages["main"] = R0
+
+
 
 """
 for (p1,p2),V in e12.items():

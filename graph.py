@@ -67,7 +67,13 @@ class Graph(dict):
         s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.edges.items() for e,m in suc])
         return s + '\n}'
 
-
+    def json(self):
+        nds = json.dumps({c:self[c] for c in self})
+        edg = ""
+        for n in self:
+            for (e,s) in self.edges[n]:
+                edg += f'{{"src":"{n}", "label":"{e}","tar":{s}}}\n'
+        return f'{{"nodes": {{{nds}}}\n"edges":[{edg}]}}'
 
 def save(gr, filename):
     req = { "command": "save_graph", "graph": json.dumps(gr), "filename": filename }

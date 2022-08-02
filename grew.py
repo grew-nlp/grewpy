@@ -8,6 +8,7 @@ import re
 import copy
 import tempfile
 import json
+from unicodedata import is_normalized
 
 #from grew import network
 #from grew import utils
@@ -77,49 +78,95 @@ class Strategy:
     def json(self):
         return f"{{{self.name} : {self.data.json()} }}"
 
-
 class GRS():
 
-    def __init__(self, data):
+    def load_grs(data):
+        """load data (either a filename or a json encoded string) within grew"""
+        if not os.path.isfile(data):
+            f = tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs")
+            f.write(data)
+            req = {"command": "load_grs", "filename": f.name}
+        else:
+            req = {"command": "load_grs", "filename": data}
+        try:
+            reply = network.send_and_receive(req)
+            index = reply["index"]
+            req = {"command": "json_grs", "grs_index": index}
+            json = network.send_and_receive(req)
+            return index,json
+        except utils.GrewError as e:
+            raise utils.GrewError(
+                {"function": "grew.GRS", "data": data, "message": e.value})
+    def __ii(self,n='',p=dict(),s=dict(),r=dict()):
+        self.filename =n
+        self.packages = p
+        self.rules = r
+        self.strats = s
+        self.index = -1
+
+    def __init__(self, data=None, **kwargs):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
         :return: an integer index for latter reference to the grs
         :raise an error if the file was not correctly loaded
         """
-        try:
-            if os.path.isfile(data):
-                req = {"command": "load_grs", "filename": data}
-                reply = network.send_and_receive(req)
-            else:
-                with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs") as f:
-                    f.write(data)
-                    f.seek(0)  # to be read by others
-                    req = {"command": "load_grs", "filename": f.name}
-                    reply = network.send_and_receive(req)
-            self.index = reply["index"]
-            req = {"command": "json_grs", "grs_index": self.index}
-            json = network.send_and_receive(req)
-            print(json)
-            self.filename = json["filename"]
-            self.strats = dict()
-            self.package = []
+        if data is None:
+            GRS.__ii(self)
+            return
+        elif len(kwargs)>0:
+            #explicit declaration
+            GRS.__ii(data, kwargs.get('packages',dict()),kwargs.get('rules',dict()),kwargs.get('strats',dict()))
+        elif isinstance(data, str):
+            index,json = GRS.load_grs(data)
+            self.index = index
+            GRS.__ii(self,json['filename'])
             for d in json["decls"]:
                 if 'strat_name' in d:
-                    self.strats[d['strat_name']] = d['strat_def']
+                    utils.map_append(
+                        self.strats, d['strat_name'], d['strat_def'])
                 elif 'package_name' in d:
-                    self.package.append(d)
+                    utils.map_append(
+                            self.packages, d['package_name'], d['decls'])
+                elif 'rule_name' in d:
+                    utils.map_append(self.rules, d['rule_name'], d['rule'])
                 else:
                     raise utils.GrewError(f"{d} is not part of a grs")
-        except utils.GrewError as e:
-            raise utils.GrewError(
-                {"function": "grew.GRS", "data": data, "message": e.value})
+        else:
+            pass
+            """
+            TO BE IMPLEMENTED
+            """
 
     def json(self):
         sts = ", ".join(
             [f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s, v in self.strats.items()])
-        pts = ", ".join([json.dumps(s) for s in self.package])
-        return f'{{"filename": "{self.filename}", "decl": [{sts}, {pts}]}}'
+        pts = ", ".join([json.dumps(s) for s in self.packages])
+        return f'{{"filename": "{self.filename}", "decls": [{sts}, {pts}]}}'
 
+    def run(self, G, strat="main"):
+        """
+        Apply rs or the last loaded one to [gr]
+        :param grs_data: a graph rewriting system or a Grew string representation of a grs
+        :param G: the graph, either a str (in grew format) or a dict
+        :param strat: the strategy (by default "main")
+        :return: the list of rewritten graphs
+        """
+        try:
+            if not self.index < 0: #not loaded
+                index,json = GRS.load_grs(self.json())
+                self.index = index
+            req = {
+            "command": "run",
+            "graph": G.json(),
+            "grs_index": self.index,
+            "strat": strat
+            }
+            print(req)
+            reply = network.send_and_receive(req)
+            return utils.rm_dups(reply)
+        except utils.GrewError as e:
+            raise utils.GrewError(
+                {"function": "grew.run", "strat": strat, "message": e.value})
 
 class Corpus():
     def __init__(self,data):
@@ -218,30 +265,3 @@ class Corpus():
             {"function": "grew.corpus_count", "message": e.value})
     
 
-'''
-def run(grs_data, graph_data, strat="main"):
-    """
-    Apply rs or the last loaded one to [gr]
-    :param grs_data: a graph rewriting system or a Grew string representation of a grs
-    :param graph_data: the graph, either a str (in grew format) or a dict
-    :param strat: the strategy (by default "main")
-    :return: the list of rewritten graphs
-    """
-    try:
-        if isinstance(grs_data, int):
-            grs_index = grs_data
-        else:
-            grs_index = grs(grs_data)
-
-        req = {
-            "command": "run",
-            "graph": json.dumps(graph_data),
-            "grs_index": grs_index,
-            "strat": strat
-        }
-        reply = network.send_and_receive(req)
-        return utils.rm_dups(reply)
-    except utils.GrewError as e:
-        raise utils.GrewError(
-            {"function": "grew.run", "strat": strat, "message": e.value})
-'''

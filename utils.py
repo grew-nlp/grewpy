@@ -98,3 +98,21 @@ def rm_dups(t):
         if i not in s:
             s.append(i)
     return s
+
+def map_append(d,k,v):
+    """
+    append v to d[k] as a list
+    """
+    if k not in d:
+        d[k] = []
+    d[k].append(v)
+
+def multi_append(d,k,v):
+    """
+    append v to d[k]
+    d[k] maps v to number of occurences of v
+    """
+    if k not in d:
+        d[k] = dict()
+    a = d[k].get(v,0)
+    d[k][v] = a+1
