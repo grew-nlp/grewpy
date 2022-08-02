@@ -40,22 +40,47 @@ def cluster(c,P,n1,n2):
         obs[(u1, u2)][""] = c.count(W)
     return obs
 
+def anomaly(obs):
+    s = sum(obs.values())
+    for x in obs:
+        if obs[x] > 0.95 * s and x:
+            return x
 
-def pairs_of_upos(c):
+def rank0(c):
     """
-    build the set of pairs of consecutive upos within c
+    builds all rank 0 rules
     """
-    P = grew.Pattern(("pattern", ["e:X -> Y"]),("pattern",["X<Y"]))
-    Q = grew.Pattern(("pattern", ["e:X -> Y"]), ("pattern",["Y<X"]))
-    e12 = cluster(c, P, "X", "Y")
-    e21 = cluster(c,Q, "X","Y") 
-    return e12,e21
+    Plr = grew.Pattern(("pattern", ["X<Y"]), ("pattern", ["e:X -> Y"]))
+    obslr = cluster(c, Plr, "X", "Y") #left to right
+    Prl = grew.Pattern(("pattern", ["Y<X"]), ("pattern", ["e:X -> Y"]))
+    obsrl = cluster(c, Prl, "X", "Y")
+    rules = []
+    for (p1,p2),es in obslr.items():
+        if x := anomaly(es):
+            #build the rule
+            #print(f"{p1} -> {p2} : {x}, {es}")
+            P = grew.Pattern(("pattern", ["X<Y", f"X[upos={p1}]", f"Y[upos={p2}]"]))
+            R = grew.Rule(f"_{p1}_lr_{p2}_",P,grew.Command(f"add_edge X-[{x}]->Y"))
+            rules.append(R)
+    for (p1, p2), es in obsrl.items():
+        if x := anomaly(es):
+            #print(f"{p1} <- {p2} : {x} {es}")
+            P = grew.Pattern(
+                ("pattern", ["Y<X", f"X[upos={p1}]", f"Y[upos={p2}]"]))
+            R = grew.Rule(f"_{p1}_rl_{p2}_",P,grew.Command(f"add_edge X-[{x}]->Y"))
+            rules.append(R)
+    return rules
 
-e12, e21 = pairs_of_upos(c)
+R0 = rank0(c)
+for r in R0:
+    print (r.json())
+
+"""
 for (p1,p2),V in e12.items():
     print(f"{p1} -> {p2} : {V}")
 for (p1, p2), V in e21.items():
     print(f"{p1} <- {p2} : {V}")
+"""
 
 """
 def filter_upos(g):

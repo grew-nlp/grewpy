@@ -42,17 +42,84 @@ class ClauseList(list):
     def json(self):
         return f"{self.sort}{{{';'.join(self)}}}"
 
-
 class Pattern(list):
     def __init__(self, *L):
         """
-        p,without,meta are list of ClauseList
+        L is a list of ClauseList or pairs (sort,clauses)
         """
         super().__init__([C if isinstance(C,ClauseList) else ClauseList(*C) for C in L])
 
     def json(self):
         return "".join([C.json() for C in self])
-        
+
+class Command():
+    def __init__(self, *L):
+        self.cmds = L
+    def json(self):
+        cm = '\n'.join(self.cmds)
+        return f"commands{{ {cm}}}"
+
+class Rule():
+    def __init__(self, name, pattern, cmds):
+        self.pattern = pattern
+        self.commands = cmds
+        self.name = name
+    def json(self):
+        p = self.pattern.json()
+        c = self.commands.json()
+        return f"rule {self.name} {{ {p}\n {c} }}"
+
+class Strategy:
+    def __init__(self, json):
+        self.name = json["strat_name"]
+        self.data = AST(json["strat_def"])
+
+    def json(self):
+        return f"{{{self.name} : {self.data.json()} }}"
+
+
+class GRS():
+
+    def __init__(self, data):
+        """Load a grs stored in a file
+        :param data: either a file name or a Grew string representation of a grs
+        :return: an integer index for latter reference to the grs
+        :raise an error if the file was not correctly loaded
+        """
+        try:
+            if os.path.isfile(data):
+                req = {"command": "load_grs", "filename": data}
+                reply = network.send_and_receive(req)
+            else:
+                with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs") as f:
+                    f.write(data)
+                    f.seek(0)  # to be read by others
+                    req = {"command": "load_grs", "filename": f.name}
+                    reply = network.send_and_receive(req)
+            self.index = reply["index"]
+            req = {"command": "json_grs", "grs_index": self.index}
+            json = network.send_and_receive(req)
+            print(json)
+            self.filename = json["filename"]
+            self.strats = dict()
+            self.package = []
+            for d in json["decls"]:
+                if 'strat_name' in d:
+                    self.strats[d['strat_name']] = d['strat_def']
+                elif 'package_name' in d:
+                    self.package.append(d)
+                else:
+                    raise utils.GrewError(f"{d} is not part of a grs")
+        except utils.GrewError as e:
+            raise utils.GrewError(
+                {"function": "grew.GRS", "data": data, "message": e.value})
+
+    def json(self):
+        sts = ", ".join(
+            [f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s, v in self.strats.items()])
+        pts = ", ".join([json.dumps(s) for s in self.package])
+        return f'{{"filename": "{self.filename}", "decl": [{sts}, {pts}]}}'
+
 
 class Corpus():
     def __init__(self,data):
@@ -150,54 +217,7 @@ class Corpus():
             raise utils.GrewError(
             {"function": "grew.corpus_count", "message": e.value})
     
-class Strategy:
-    def __init__(self, json):
-        self.name = json["strat_name"]
-        self.data = AST(json["strat_def"])
 
-    def json(self):
-        return f"{{{self.name} : {self.data.json()} }}"
-
-class GRS():
-
-    def __init__(self,data):
-        """Load a grs stored in a file
-        :param data: either a file name or a Grew string representation of a grs
-        :return: an integer index for latter reference to the grs
-        :raise an error if the file was not correctly loaded
-        """
-        try:
-            if os.path.isfile(data):
-                req = {"command": "load_grs", "filename": data}
-                reply = network.send_and_receive(req)
-            else:
-                with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs") as f:
-                    f.write(data)
-                    f.seek(0)  # to be read by others
-                    req = {"command": "load_grs", "filename": f.name}
-                    reply = network.send_and_receive(req)
-            self.index = reply["index"]
-            req = {"command": "json_grs","grs_index": self.index}
-            json = network.send_and_receive(req)
-            print(json)
-            self.filename = json["filename"]
-            self.strats = dict()
-            self.package = []
-            for d in json["decls"]:
-                if 'strat_name' in d:
-                    self.strats[d['strat_name']] = d['strat_def']
-                elif 'package_name' in d:
-                    self.package.append(d)
-                else:
-                    raise utils.GrewError(f"{d} is not part of a grs")
-        except utils.GrewError as e:
-            raise utils.GrewError(
-                {"function": "grew.GRS", "data": data, "message": e.value})
-        
-    def json(self):
-        sts = ", ".join([f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s,v in self.strats.items()])
-        pts = ", ".join([json.dumps(s) for s in self.package])
-        return f'{{"filename": "{self.filename}", "decl": [{sts}, {pts}]}}'
 '''
 def run(grs_data, graph_data, strat="main"):
     """
