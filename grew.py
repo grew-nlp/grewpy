@@ -118,8 +118,8 @@ class GRS():
             GRS.__ii(data, kwargs.get('packages',dict()),kwargs.get('rules',dict()),kwargs.get('strats',dict()))
         elif isinstance(data, str):
             index,json = GRS.load_grs(data)
-            self.index = index
             GRS.__ii(self,json['filename'])
+            self.index = index
             for d in json["decls"]:
                 if 'strat_name' in d:
                     utils.map_append(
