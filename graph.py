@@ -74,8 +74,7 @@ class Graph(dict):
             for (e,s) in self.edges[n]:
                 edg_list += [f'{{"src":"{n}", "label":"{e}","tar":"{s}"}}']
         edg = ",".join (edg_list)
-        # return f'{{"nodes": {{{nds}}}\n"edges":[{edg}]}}'
-        return '{ "nodes": %s, "edges":[%s]}' % (nds, edg)
+        return f'{{ "nodes": {nds}, "edges":[{edg}]}}'
 
 def save(gr, filename):
     req = { "command": "save_graph", "graph": json.dumps(gr), "filename": filename }
