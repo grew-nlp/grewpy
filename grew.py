@@ -151,9 +151,10 @@ class GRS():
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
+
         try:
-            if not self.index < 0: #not loaded
-                index,json = GRS.load_grs(self.json())
+            if self.index < 0: #not loaded
+                index,_ = GRS.load_grs(self.json())
                 self.index = index
             req = {
             "command": "run",
