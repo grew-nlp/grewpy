@@ -3,6 +3,7 @@ Grew module : anything you want to talk about graphs
 Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
+from operator import ne
 import os.path
 import re
 import copy
@@ -69,14 +70,6 @@ class Rule():
         p = self.pattern.json()
         c = self.commands.json()
         return f"rule {self.name} {{ {p}\n {c} }}"
-
-class Strategy:
-    def __init__(self, json):
-        self.name = json["strat_name"]
-        self.data = AST(json["strat_def"])
-
-    def json(self):
-        return f"{{{self.name} : {self.data.json()} }}"
 
 class GRS():
 
@@ -176,24 +169,21 @@ class Corpus():
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
-        try:
-            if isinstance(data, list):
-                req = { "command": "load_corpus", "files": data }
-                reply = network.send_and_receive(req)
-            elif os.path.isfile(data):
-                req = { "command": "load_corpus", "files": [data] }
-                reply = network.send_and_receive(req)
-            else:
-                with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
-                    f.write(data)
-                    f.seek(0)  # to be read by others
-                    req = { "command": "load_corpus", "files": [f.name] }
-                    reply = network.send_and_receive(req)
-            self.id =reply["index"]
-            req = {"command": "corpus_sent_ids", "corpus_index": self.id}
-            self.sent_ids = network.send_and_receive(req)
-        except utils.GrewError as e: 
-            raise utils.GrewError({"function": "grew.corpus", "data": data, "message":e.value})
+        if isinstance(data, list):
+            req = { "command": "load_corpus", "files": data }
+            reply = network.send_request(req)
+        elif os.path.isfile(data):
+            req = { "command": "load_corpus", "files": [data] }
+            reply = network.send_request(req)
+        else:
+            with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
+                f.write(data)
+                f.seek(0)  # to be read by others
+                req = { "command": "load_corpus", "files": [f.name] }
+                reply = network.send_request(req)
+        self.id =reply["index"]
+        req = {"command": "corpus_sent_ids", "corpus_index": self.id}
+        self.sent_ids = network.send_request(req)
     
     def __len__(self):
         return len(self.sent_ids)
@@ -205,26 +195,12 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: a graph
         """
+        req = {"command": "corpus_get", "corpus_index": self.id}
         if isinstance(data, int):
-            req = {
-            "command": "corpus_get",
-            "corpus_index": self.id,
-            "position": data % len(self),
-            }
+            req["position"]  = data % len(self)
         elif isinstance(data, str):
-            req = {
-            "command": "corpus_get",
-            "corpus_index": self.id,
-            "sent_id": data,
-            }
-        else:
-            raise utils.GrewError({"function": "grew.corpus_get",
-                              "message": "unexpected data, should be int or str"})
-        try:
-            return Graph(network.send_and_receive(req))
-        except utils.GrewError as e:
-            raise utils.GrewError(
-            {"function": "grew.corpus_get", "message": e.value})
+            req["sent_id"] =  data
+        return Graph(network.send_and_receive(req))
 
     def __iter__(self):
         return iter(self.sent_ids)
@@ -236,16 +212,11 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the list of matching of [pattern] into the corpus
         """
-        try:
-            req = {
+        return network.send_request({
             "command": "corpus_search",
             "corpus_index": self.id,
             "pattern": pattern.json(),
-            }
-            return network.send_and_receive(req)
-        except utils.GrewError as e:
-            raise utils.GrewError(
-            {"function": "grew.corpus_search", "message": e.value})
+            })
 
     def count(self,pattern):
         """
@@ -254,15 +225,8 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [pattern] into the corpus
         """
-        try:
-            req = {
+        return network.send_request({
             "command": "corpus_count",
             "corpus_index": self.id,
             "pattern": pattern.json(),
-            }
-            return network.send_and_receive(req)
-        except utils.GrewError as e:
-            raise utils.GrewError(
-            {"function": "grew.corpus_count", "message": e.value})
-    
-
+            })

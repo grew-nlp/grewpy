@@ -18,6 +18,11 @@ for n in c[-1]:
 
 grs = grew.GRS("single.grs")
 grs2 = grew.GRS(grs.json())
-res = grs.run(c["n01027007"],"main")
+print(grs2.index)
+G = c["n01027007"]
+print(len(G))
+#res = grs.run(G,"s_1")
 
-
+Plr = grew.Pattern(("pattern", ["X<Y"]), ("pattern", ["e:X -> Y"]))
+print(len(c.search(Plr)))
+print(Plr.json())
