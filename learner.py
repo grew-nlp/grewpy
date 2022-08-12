@@ -58,23 +58,28 @@ gcs = {sid : c[sid] for sid in c}#set of graphs
 g0s = {sid : c[sid] for sid in c} #a copy of the graphs
 for sid,g in g0s.items():
     for n in g:
-        g.edges[n]=[] #trash all edges in g0s
+        g.sucs[n]=[] #trash all edges in g0s
 
 def verify(gs,hs):
     recall, found = 0,0
     for sid,g in gs.items():
         for n in g:
-            for e,s in g.edges[n]:
-                if (e,s) in hs[sid].edges[n]:
+            for e,s in g.sucs[n]:
+                if (e,s) in hs[sid].sucs[n]:
                     found += 1
                 else:
                     recall += 1
     return found, recall
 
 print(verify(g0s,gcs))
-print(len(R0))    
-GRS = grew.GRS()
-GRS.packages["main"] = R0
+print(len(R0)) 
+R0 = R0[:3]   
+Rs0 = grew.GRS("rank0",rules=R0,
+                       strats=[grew.Strategy('main',f'Onf(Alt({",".join([r.name for r in R0])}))')])
+for sid in c:
+    x = Rs0.run(c[sid], 'main')
+    print(len(x))
+
 
 
 

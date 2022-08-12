@@ -30,7 +30,7 @@ class Graph(dict):
         :return: a graph
         """
         super().__init__()
-        self.edges = dict()
+        self.sucs = dict()
         if data is None:
             pass            
         elif isinstance(data,str):
@@ -39,18 +39,18 @@ class Graph(dict):
                 data = json.loads(data)
                 for name, val in data.items():
                     self[name] = val[0]
-                    self.edges[name] = val[1]
+                    self.sucs[name] = val[1]
             except json.decoder.JSONDecodeError:
                 pass
         elif isinstance(data, Graph):
             super().__init__(data)
-            self.edges = copy(data.edges)
+            self.sucs = copy(data.sucs)
         elif isinstance(data, dict):
             #supposed to be json decoded str
             for name,val in data.items():
                 self[name] = val[0]
-                self.edges[name] = val[1]
-            for n,v in self.edges.items():
+                self.sucs[name] = val[1]
+            for n,v in self.sucs.items():
                 for e in v:
                     assert len(e) == 2
 
@@ -64,14 +64,14 @@ class Graph(dict):
             label = ["%s:%s" % (f,v.replace('"','\\"')) for f, v in fs.items()]
             s += ",".join(label)
             s += '"];\n'
-        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.edges.items() for e,m in suc])
+        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.sucs.items() for e,m in suc])
         return s + '\n}'
 
     def json(self):
         nds = json.dumps({c:self[c] for c in self})
         edg_list = []
         for n in self:
-            for (e,s) in self.edges[n]:
+            for (e,s) in self.sucs[n]:
                 edg_list += [f'{{"src":"{n}", "label":"{e}","tar":"{s}"}}']
         edg = ",".join (edg_list)
         return f'{{ "nodes": {nds}, "edges":[{edg}]}}'

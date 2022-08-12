@@ -19,6 +19,8 @@ from graph import Graph
 
 ''' Library tools '''
 
+cpt = iter(range(1000000000))#an iterator for implicit names
+
 def init(dev=False):
     """
     Initialize connection to GREW library
@@ -34,7 +36,7 @@ class NamedList():
     """
     def __init__(self,sort,*L):
         """
-        L is a list of 
+        L is a list of
          - ";" separated clause or
          - a list of items
          - they will be concatenated
@@ -50,13 +52,15 @@ class NamedList():
     def json(self):
         t = [x.json() if "json" in dir(x) else x for x in self.items]
         return f"{self.sort}{{{';'.join(t)}}}"
+    def __str__(self):
+        return f"{self.sort}{{{';'.join(self.items)}}}"
 
 class Pattern():
     def __init__(self, *L):
         """
         L is a list of ClauseList or pairs (sort,clauses)
         """
-        self.items = tuple(C if isinstance(C,NamedList) else NamedList(*C) 
+        self.items = tuple(C if isinstance(C,NamedList) else NamedList(*C)
                         for C in L)
 
     def json(self):
@@ -65,12 +69,30 @@ class Pattern():
     def __getitem__(self,i):
         return self.items[i]
 
-class Command(NamedList):
-    def __init__(self, *L):
-        super().__init__("commands",*L)
+    def __str__(self):
+        return "\n".join([str(x) for x in self.items])
+
+class Strategy():
+    def __init__(self,name, data):
+        self.data = data
+        self.name = name
     def json(self):
-        cm = '\n'.join(self.items)
-        return f"{self.sort}{{ {cm}}}"
+        return f'{{"type":"strat", "id": "{self.name}", "data" : "{self.data}"}}'
+    def __str__(self):
+        return f"strat {self.name} {{{self.data}}}"
+
+class Command():
+    def __init__(self, *L):
+        self.items = []
+        for elt in L:
+            if isinstance(elt,str):
+                self.items += [t.strip() for t in elt.split(";") if t.strip()]
+            elif isinstance(elt,list):
+                self.items += elt
+
+    def __str__(self):
+        c = ";".join(self.items)
+        return f"commands {{{c}}}"
 
 class Rule():
     def __init__(self, name, pattern, cmds):
@@ -81,29 +103,29 @@ class Rule():
         p = self.pattern.json()
         c = self.commands.json()
         return f"rule {self.name} {{ {p}\n {c} }}"
+    def __str__(self):
+        return f"rule {self.name}{{{self.pattern}\n{self.commands}}}"
 
 class GRS():
 
     def load_grs(data):
         """load data (either a filename or a json encoded string) within grew"""
+        name = next(cpt)
         if not os.path.isfile(data):
             f = tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs")
             f.write(data)
             f.flush() # The file can be empty if we do not flush
             req = {"command": "load_grs", "filename": f.name}
+            reply = network.send_request(req)
+            name = data
         else:
             req = {"command": "load_grs", "filename": data}
-        try:
-            reply = network.send_and_receive(req)
-            index = reply["index"]
-            req = {"command": "json_grs", "grs_index": index}
-            json = network.send_and_receive(req)
-            return index,json
-        except utils.GrewError as e:
-            raise utils.GrewError(
-                {"function": "grew.GRS", "data": data, "message": e.value})
-    def __ii(self,n='',p=dict(),s=dict(),r=dict()):
-        self.filename =n
+            reply = network.send_request(req)
+        index = reply["index"]
+        return index,name
+
+    def __ii(self,n,p,s,r,index=-1):
+        self.name =n
         self.packages = p
         self.rules = r
         self.strats = s
@@ -115,25 +137,32 @@ class GRS():
         :return: an integer index for latter reference to the grs
         :raise an error if the file was not correctly loaded
         """
-        if data is None:
-            GRS.__ii(self)
-            return
-        elif len(kwargs)>0:
+        if len(kwargs) > 0:
             #explicit declaration
-            GRS.__ii(data, kwargs.get('packages',dict()),kwargs.get('rules',dict()),kwargs.get('strats',dict()))
+            GRS.__ii(self,data if data else next(cpt), 
+            kwargs.get('packages', list()), 
+            kwargs.get('strats', list()),
+            kwargs.get('rules', list()))
+        elif data is None:
+            GRS.__ii(self,'',list(),list(),list())
+            return
         elif isinstance(data, str):
-            index,json = GRS.load_grs(data)
-            GRS.__ii(self,json['filename'])
-            self.index = index
+            index,name = GRS.load_grs(data)
+            GRS.__ii(self,str(name),list(),list(),list(),index)
+            req = {"command": "json_grs", "grs_index": index}
+            json = network.send_request(req)
             for d in json["decls"]:
                 if 'strat_name' in d:
-                    utils.map_append(
-                        self.strats, d['strat_name'], d['strat_def'])
+                    pass
+                    #TO BE IMPLEMENTED
+                    # self.strats.append(Strategy(d['strat_name'], d['strat_def']))
                 elif 'package_name' in d:
-                    utils.map_append(
-                            self.packages, d['package_name'], d['decls'])
+                    pass
+                    #TO BE IMPLEMENTED
                 elif 'rule_name' in d:
-                    utils.map_append(self.rules, d['rule_name'], d['rule'])
+                    pass
+                    #self.rules.append(Rule(d['rule_name'],d['rule'],''))
+                    #TO BE IMPLEMENTED
                 else:
                     raise utils.GrewError(f"{d} is not part of a grs")
         else:
@@ -148,6 +177,15 @@ class GRS():
         pts = ", ".join([json.dumps(s) for s in self.packages])
         return f'{{"filename": "{self.filename}", "decls": [{sts}, {pts}]}}'
 
+    def __str__(self):
+        """
+        a string representation of self
+        """
+        sts = "\n".join([f"{s}" for s in self.strats])
+        rls = "\n".join([f"{r}" for r in self.rules])
+        return sts+"\n"+rls
+
+
     def run(self, G, strat="main"):
         """
         Apply rs or the last loaded one to [gr]
@@ -156,23 +194,17 @@ class GRS():
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
-
-        try:
-            if self.index < 0: #not loaded
-                index,_ = GRS.load_grs(self.json())
-                self.index = index
-            req = {
+        if self.index < 0: #not loaded
+            index,_ = GRS.load_grs(str(self))
+            self.index = index
+        req = {
             "command": "run",
             "graph": G.json(),
             "grs_index": self.index,
             "strat": strat
-            }
-            # print(req)
-            reply = network.send_and_receive(req)
-            return utils.rm_dups(reply)
-        except utils.GrewError as e:
-            raise utils.GrewError(
-                {"function": "grew.run", "strat": strat, "message": e.value})
+        }
+        reply = network.send_request(req)
+        return utils.rm_dups(reply)
 
 class Corpus():
     def __init__(self,data):
@@ -190,13 +222,13 @@ class Corpus():
         else:
             with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
                 f.write(data)
-                f.seek(0)  # to be read by others
+                f.flush()  # to be read by others
                 req = { "command": "load_corpus", "files": [f.name] }
                 reply = network.send_request(req)
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
         self.sent_ids = network.send_request(req)
-    
+
     def __len__(self):
         return len(self.sent_ids)
 
