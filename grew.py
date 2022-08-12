@@ -89,6 +89,7 @@ class GRS():
         if not os.path.isfile(data):
             f = tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs")
             f.write(data)
+            f.flush() # The file can be empty if we do not flush
             req = {"command": "load_grs", "filename": f.name}
         else:
             req = {"command": "load_grs", "filename": data}
@@ -166,7 +167,7 @@ class GRS():
             "grs_index": self.index,
             "strat": strat
             }
-            print(req)
+            # print(req)
             reply = network.send_and_receive(req)
             return utils.rm_dups(reply)
         except utils.GrewError as e:
