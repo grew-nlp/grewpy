@@ -23,6 +23,6 @@ G = c["n01027007"]
 print(len(G))
 #res = grs.run(G,"s_1")
 
-Plr = grew.Pattern(("pattern", ["X<Y"]), ("pattern", ["e:X -> Y"]))
+Plr = grew.Pattern(("pattern", "X<Y"), ("pattern", "e:X -> Y"))
 print(len(c.search(Plr)))
 print(Plr.json())

@@ -17,7 +17,7 @@ def cluster(c,P,n1,n2):
         pair(c,matching,obs,n1,n2)
     for u1,u2 in obs:
         W = grew.Pattern(
-            ("pattern", [f"Y[upos={u2}]", f"X[upos={u1}]"]), 
+            ("pattern", f"Y[upos={u2}];X[upos={u1}]"), 
             P[1],
             ("without", ["X -> Y"]))
         obs[(u1, u2)][""] = c.count(W)
@@ -33,15 +33,14 @@ def rank0(c):
     """
     builds all rank 0 rules
     """
-    Plr = grew.Pattern(("pattern", ["X<Y"]), ("pattern", ["e:X -> Y"]))
+    Plr = grew.Pattern(("pattern", "X<Y"), ("pattern", "e:X -> Y"))
     obslr = cluster(c, Plr, "X", "Y") #left to right
-    Prl = grew.Pattern(("pattern", ["Y<X"]), ("pattern", ["e:X -> Y"]))
+    Prl = grew.Pattern(("pattern", "Y<X"), ("pattern", "e:X -> Y"))
     obsrl = cluster(c, Prl, "X", "Y")
     rules = []
     for (p1,p2),es in obslr.items():
         if x := anomaly(es):
-            #build the rule
-            #print(f"{p1} -> {p2} : {x}, {es}")
+            #build the rule            
             P = grew.Pattern(("pattern", ["X<Y", f"X[upos={p1}]", f"Y[upos={p2}]"]))
             R = grew.Rule(f"_{p1}_lr_{p2}_",P,grew.Command(f"add_edge X-[{x}]->Y"))
             rules.append(R)
@@ -73,7 +72,7 @@ def verify(gs,hs):
     return found, recall
 
 print(verify(g0s,gcs))
-    
+print(len(R0))    
 GRS = grew.GRS()
 GRS.packages["main"] = R0
 

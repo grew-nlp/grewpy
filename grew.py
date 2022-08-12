@@ -27,39 +27,50 @@ def init(dev=False):
     return network.init(dev)
 init()
 
-class ClauseList(list):
+class NamedList():
     """
-    a list of clauses
+    a list of things with an underlying name:
+    things may be json()'ed
     """
-    def __init__(self,*L):
-        if len(L)>=2:
-            self.sort = L[0]        
-            if isinstance(L,str):
-                super().__init__([c.strip() for c in L[1].split(";") if c.strip()])
+    def __init__(self,sort,*L):
+        """
+        L is a list of 
+         - ";" separated clause or
+         - a list of items
+         - they will be concatenated
+        """
+        self.sort = sort
+        self.items = tuple()
+        for elt in L:
+            if isinstance(elt,str):
+                self.items += tuple(c.strip() for c in elt.split(";") if c.strip())
             else:
-                super().__init__(*L[1:])
-        elif len(L) == 1 and isinstance(L[0],ClauseList):
-            self = L[0]
+                self.items += tuple(elt)
 
     def json(self):
-        return f"{self.sort}{{{';'.join(self)}}}"
+        t = [x.json() if "json" in dir(x) else x for x in self.items]
+        return f"{self.sort}{{{';'.join(t)}}}"
 
-class Pattern(list):
+class Pattern():
     def __init__(self, *L):
         """
         L is a list of ClauseList or pairs (sort,clauses)
         """
-        super().__init__([C if isinstance(C,ClauseList) else ClauseList(*C) for C in L])
+        self.items = tuple(C if isinstance(C,NamedList) else NamedList(*C) 
+                        for C in L)
 
     def json(self):
-        return "".join([C.json() for C in self])
+        return "".join([C.json() for C in self.items])
 
-class Command():
+    def __getitem__(self,i):
+        return self.items[i]
+
+class Command(NamedList):
     def __init__(self, *L):
-        self.cmds = L
+        super().__init__("commands",*L)
     def json(self):
-        cm = '\n'.join(self.cmds)
-        return f"commands{{ {cm}}}"
+        cm = '\n'.join(self.items)
+        return f"{self.sort}{{ {cm}}}"
 
 class Rule():
     def __init__(self, name, pattern, cmds):
