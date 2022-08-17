@@ -2,14 +2,26 @@ from audioop import mul
 import grew
 from utils import multi_append
 
-c = grew.Corpus("UD_French-PUD/fr_pud-ud-test.conllu")
+c = grew.Corpus("test.conllu") #UD_French-PUD/fr_pud-ud-test.conllu")
+
+def parse_edge(m,e_name):
+    """
+    m is a matching
+    """
+    label = m[e_name]['label']
+    if isinstance(label,str):
+        return label
+    elif isinstance(label,dict):
+        if '1' in label and '2' in label:
+            return f"1={label['1']},2={label['2']}"
+    raise ValueError(m[e_name]['label'])
 
 def pair(c,matching,e,n1,n2):#append the matching in e
     G = c[matching['sent_id']]
     P1 = G[matching['matching']['nodes'][n1]].get("upos", "")
     P2 = G[matching['matching']['nodes'][n2]].get("upos", "")
     if P1 and P2:
-        multi_append(e, (P1, P2), str(matching['matching']['edges']['e']['label']))
+        multi_append(e, (P1, P2), parse_edge(matching['matching']['edges'],'e'))
 
 def cluster(c,P,n1,n2):
     obs = dict()
@@ -41,14 +53,15 @@ def rank0(c):
     for (p1,p2),es in obslr.items():
         if x := anomaly(es):
             #build the rule            
-            P = grew.Pattern(("pattern", ["X<Y", f"X[upos={p1}]", f"Y[upos={p2}]"]))
+            P = grew.Pattern(
+                ("pattern", ["X<Y", f"X[upos={p1}]", f"Y[upos={p2}]"]), ("without", f"X-[{x}]->Y"))
             R = grew.Rule(f"_{p1}_lr_{p2}_",P,grew.Command(f"add_edge X-[{x}]->Y"))
             rules.append(R)
     for (p1, p2), es in obsrl.items():
         if x := anomaly(es):
             #print(f"{p1} <- {p2} : {x} {es}")
             P = grew.Pattern(
-                ("pattern", ["Y<X", f"X[upos={p1}]", f"Y[upos={p2}]"]))
+                ("pattern", ["Y<X", f"X[upos={p1}]", f"Y[upos={p2}]"]),("without",f"X-[{x}]->Y"))
             R = grew.Rule(f"_{p1}_rl_{p2}_",P,grew.Command(f"add_edge X-[{x}]->Y"))
             rules.append(R)
     return rules
@@ -72,28 +85,12 @@ def verify(gs,hs):
     return found, recall
 
 print(verify(g0s,gcs))
-print(len(R0)) 
-R0 = R0[:3]   
+print(len(R0))  
 Rs0 = grew.GRS("rank0",rules=R0,
                        strats=[grew.Strategy('main',f'Onf(Alt({",".join([r.name for r in R0])}))')])
-for sid in c:
-    x = Rs0.run(c[sid], 'main')
-    print(len(x))
 
 
-
-
-"""
-for (p1,p2),V in e12.items():
-    print(f"{p1} -> {p2} : {V}")
-for (p1, p2), V in e21.items():
-    print(f"{p1} <- {p2} : {V}")
-"""
-
-"""
-def filter_upos(g):
-    for n in g:
-        g[n] =  {"upos": g[n]["upos"]} if "upos" in g[n] else {"upos":""}
-    return g
-
-"""
+g1s = {
+    sid : Rs0.run(g0s[sid], 'main')[0] 
+    for sid in g0s}
+print(verify(g1s,gcs))

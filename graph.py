@@ -76,6 +76,32 @@ class Graph(dict):
         edg = ",".join (edg_list)
         return f'{{ "nodes": {nds}, "edges":[{edg}]}}'
 
+    def __str__(self):
+        return f"({str(super())}, {str(self.sucs)})"
+
+    def to_conll(self):
+        """
+        return a dict representing self according to conll
+        the labels of nodes are supposed to follow conll rules
+        the graph itself should be a sub graph of a tree 
+        """
+        conllitems = {n : {k: self[n].get(k,'_') for k in ['id', 'form', 'lemma',
+                                               'upos', 'xpos', 'feats', 'head', 'deprel','misc', 'deps']} 
+                                               for n in self if n and n != '0'}
+        for n, nsucs in self.sucs.items():
+            if n and n != '0': #remove the "0" node
+                conllitems[n]['id'] = n
+                for d,v in nsucs:
+                    conllitems[v]['head'] = n
+                    conllitems[v]['deprel'] = d
+        return list(conllitems.values())
+
+
+        
+    
+
+
+
 def save(gr, filename):
     req = { "command": "save_graph", "graph": json.dumps(gr), "filename": filename }
     reply = network.send_and_receive(req)

@@ -19,7 +19,7 @@ from graph import Graph
 
 ''' Library tools '''
 
-cpt = iter(range(1000000000))#an iterator for implicit names
+cpt = iter(range(2**30))#an iterator for implicit names
 
 def init(dev=False):
     """
@@ -204,7 +204,7 @@ class GRS():
             "strat": strat
         }
         reply = network.send_request(req)
-        return utils.rm_dups(reply)
+        return [Graph(s) for s in reply]
 
 class Corpus():
     def __init__(self,data):
