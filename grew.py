@@ -240,6 +240,15 @@ class Corpus():
         :return: a graph
         """
         req = {"command": "corpus_get", "corpus_index": self.id}
+        if isinstance(data, slice):
+            start = data.start if data.start else 0
+            stop = data.stop if data.stop else len(self)
+            step = data.step if data.step else 1
+            res = []
+            for i in range(start,stop, step):
+                req["position"] = i
+                res.append(Graph(network.send_and_receive(req)))
+            return res
         if isinstance(data, int):
             req["position"]  = data % len(self)
         elif isinstance(data, str):

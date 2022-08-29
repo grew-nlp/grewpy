@@ -17,8 +17,8 @@ for n in c[-1]:
 # p = grew.Pattern(("pattern",["X[upos=VERB]"]))
 # print(len(c.search(p)))
 
-grs = grew.GRS("my.grs")
-print(grs)
+#grs = grew.GRS("r0.grs")
+#print(grs)
 #grs2 = grew.GRS(grs.json())
 
 #print(grs2.index)
@@ -31,14 +31,14 @@ for sid in gs:
 
 c0 = {sid : gs[sid].to_conll() for sid in gs}
 c1 = {sid : conllu.TokenList(c0[sid], {'text' : "None", "sent_id": sid } ) for sid in c0}
-with open("empty.conllu","w") as f:
+with open("empty.conllu","w",encoding="utf-8") as f:
     for sid in c1:
         f.write(c1[sid].serialize())
         f.write("\n")
 
 ec = grew.Corpus("empty.conllu")
 g0 = ec[0]
-print(grs.run(g0))
+#print(grs.run(g0))
 
 
 
