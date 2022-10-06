@@ -1,6 +1,0 @@
-package p_1 {
-  rule r_1  { pattern {X[upos=DET];Y[upos=NOUN];X<Y} without { Y -[det]-> X} commands { add_edge Y -[det]-> X  } }
-}
-
-strat p_1_nfs { Iter (p_1) }  % all normal forms with package p_1
-strat p_1_onf { Onf (p_1) }   % one normal form with package p_1
