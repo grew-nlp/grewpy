@@ -1,11 +1,11 @@
 import grew
 
-corpus = grew.Corpus("UD_French-PUD/fr_pud-ud-test.conllu")
+corpus = grew.Corpus("resources/fr_pud-ud-test.conllu")
 graph = corpus["n01027007"]
 
 
 print ("=== test 1 ===")
-single = grew.GRS("single.grs")
+single = grew.GRS("resources/single.grs")
 
 try:
     res = single.run(graph)

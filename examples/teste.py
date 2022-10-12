@@ -1,11 +1,12 @@
 import grew
 import conllu
 
-#c = grew.Corpus("test.conllu") #UD_French-PUD/fr_pud-ud-test.conllu")
-# print(len(c))
-# for sid in c:
-#     print(len(c[sid]),end=" ")
-# x = c[33]
+c = grew.Corpus("resources/fr_pud-ud-test.conllu") # from UD_French-PUD"
+print(len(c))
+print (c)
+for sid in c:
+  print(len(c[sid]),end=" ")
+x = c[33]
 """
 with open("hum.dot","w") as f:
     f.write(x.to_dot())
@@ -17,7 +18,7 @@ for n in c[-1]:
 # p = grew.Pattern(("pattern",["X[upos=VERB]"]))
 # print(len(c.search(p)))
 
-grs = grew.GRS("r0.grs")
+grs = grew.GRS("resources/single.grs")
 #print(grs)
 #grs2 = grew.GRS(grs.json())
 
