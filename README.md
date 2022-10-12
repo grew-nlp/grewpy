@@ -1,16 +1,18 @@
-# Recompile the Caml code
+# On going work for a new version of Python binding on Grew
 
-From the top dir `python` run
+## Grew code
+To set up the Grew part of the code, you should run:
 
+### Fist time
 ```
-make clean
-make
+opam pin add libcaml-grew git+https://gitlab.inria.fr/grew/libcaml-grew#python --no-action
+opam pin add grewpy git+https://gitlab.inria.fr/grew/python#python --no-action
+opam install grewpy
 ```
 
-The new compiled file is `_build/src_ocaml/grewpy.native`. Copy it with name `grewpy` somewhere in your PATH with higher precedence than the `grewpy` from opam (`.opam/…/bin/grewpy`).
-
-The installation date can be checked with:
-
+### Later updates
 ```
-ls -l `which grewpy`
+opam update
+opam upgrade
 ```
+
