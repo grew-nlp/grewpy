@@ -150,8 +150,11 @@ class GRS():
             index,name = GRS.load_grs(data)
             GRS.__ii(self,str(name),list(),list(),list(),index)
             req = {"command": "json_grs", "grs_index": index}
-            json = network.send_request(req)
-            for d in json["decls"]:
+            json_data = network.send_request(req)
+            print ("--------------------")
+            print (json.dumps(json_data, indent=2))
+            print ("--------------------")
+            for d in json_data["decls"]:
                 if 'strat_name' in d:
                     pass
                     #TO BE IMPLEMENTED
@@ -171,11 +174,14 @@ class GRS():
             TO BE IMPLEMENTED
             """
 
+    # def json(self):
+    #     sts = ", ".join(
+    #         [f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s, v in self.strats.items()])
+    #     pts = ", ".join([json.dumps(s) for s in self.packages])
+    #     return f'{{"filename": "{self.filename}", "decls": [{sts}, {pts}]}}'
+
     def json(self):
-        sts = ", ".join(
-            [f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s, v in self.strats.items()])
-        pts = ", ".join([json.dumps(s) for s in self.packages])
-        return f'{{"filename": "{self.filename}", "decls": [{sts}, {pts}]}}'
+        return f'{{"name": "{self.name}", "strats": {self.strats}}}'
 
     def __str__(self):
         """
