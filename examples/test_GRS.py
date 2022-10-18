@@ -1,30 +1,13 @@
 import grew
 import conllu
 
-c = grew.Corpus("resources/fr_pud-ud-test.conllu") # from UD_French-PUD"
-print(len(c))
-print (c)
-for sid in c:
-  print(len(c[sid]),end=" ")
-x = c[33]
-"""
-with open("hum.dot","w") as f:
-    f.write(x.to_dot())
-
-for n in c[-1]:
-    print(f"node={n}")
-"""
-
-# p = grew.Pattern(("pattern",["X[upos=VERB]"]))
-# print(len(c.search(p)))
-
 grs = grew.GRS("resources/single.grs")
-#print(grs)
+print(type(grs))
+print (grs.index)
 #grs2 = grew.GRS(grs.json())
 
-#print(grs2.index)
-G = c["n01001011"]
-print(len(G))
+exit (0)
+
 #res = grs.run(G,"s_1")
 gs = {sid : c[sid] for sid in c}
 for sid in gs:

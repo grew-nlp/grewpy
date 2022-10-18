@@ -1,7 +1,5 @@
 """
 Grew module: anything you want to talk about graphs
-Graphs are represented either by a dict (called dict-graph),
-or by an str (str-graph).
 """
 import os.path
 import re
@@ -16,7 +14,26 @@ import network
 
 ''' interfaces'''
 
-class Graph(dict):
+class Fs_node(dict):
+    def __init__(self,data):
+        if isinstance(data,str):
+            d = {"label": data}
+            super().__init__(d) 
+        elif isinstance(data, dict):
+            super().__init__(data)
+        else:
+            raise ValueError(f"data is not a feature structure {data}")
+
+class Fs_edge(dict):
+    def __init__(self,data):
+        if isinstance(data,str):
+            super().__init__({"1": data}) 
+        elif isinstance(data, dict):
+            super().__init__(data)
+        else:
+            raise ValueError(f"data is not a feature structure {data}")
+
+class Graph():
     """
     a dict mapping node keys to feature structure
     with an extra dict mapping node keys to successors (pair of edge feature,node key)
@@ -29,37 +46,50 @@ class Graph(dict):
         an oterh graph => copy the dict 
         :return: a graph
         """
-        super().__init__()
-        self.sucs = dict()
+        self.features = dict()
+        self.sucs = dict() # ??? initaliser à []
+        self.meta = dict ()
+        self.order = []
         if data is None:
-            pass            
+            pass # ??? on garde le graphe vide
         elif isinstance(data,str):
             #either json or filename
             try:
-                data = json.loads(data)
-                for name, val in data.items():
-                    self[name] = val[0]
-                    self.sucs[name] = val[1]
+                data_json = json.loads(data)
+                self.__of_dict(data_json)
             except json.decoder.JSONDecodeError:
-                pass
+                pass # TODO load file
         elif isinstance(data, Graph):
-            super().__init__(data)
+            self.features = copy(data.features)
             self.sucs = copy(data.sucs)
+            self.meta = copy(data.meta)
+            self.order = copy(data.order)
         elif isinstance(data, dict):
-            #supposed to be json decoded str
-            for name,val in data.items():
-                self[name] = val[0]
-                self.sucs[name] = val[1]
-            for n,v in self.sucs.items():
-                for e in v:
-                    assert len(e) == 2
+            self.__of_dict(data)
 
-    def to_dot(self):
+    def __of_dict(self,data_json):
+        self.features = {k: Fs_node(v) for k,v in data_json["nodes"].items()}
+        for edge in data_json.get("edges", []):
+            utils.map_append (self.sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
+        self.meta = data_json.get("meta", dict())
+        self.order = data_json.get("order", list())
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, nid):
+        return (self.features[nid])
+
+    def suc(self, nid):
+        #return self.sucs[nid] if nid in self.sucs else 
+        return self.sucs.get(nid, [])
+
+    def to_dot(self): # TODO fix it
         """
         return a string in dot/graphviz format
         """
         s = 'digraph G{\n'
-        for n,fs in self.items():
+        for n,fs in self.features.items():
             s += f'{n}[label="'
             label = ["%s:%s" % (f,v.replace('"','\\"')) for f, v in fs.items()]
             s += ",".join(label)
@@ -68,18 +98,19 @@ class Graph(dict):
         return s + '\n}'
 
     def json(self):
-        nds = json.dumps({c:self[c] for c in self})
+        nds = json.dumps({c:self[c] for c in self.features})
         edg_list = []
-        for n in self:
+        for n in self.sucs:
             for (e,s) in self.sucs[n]:
-                edg_list += [f'{{"src":"{n}", "label":"{e}","tar":"{s}"}}']
+                edg_list += [f'{{"src":"{n}", "label":"{e}","tar":"{s}"}}'] # TODO fix with json.dumps
         edg = ",".join (edg_list)
+        # TODO add meta and order
         return f'{{ "nodes": {nds}, "edges":[{edg}]}}'
 
     def __str__(self):
-        return f"({str(super())}, {str(self.sucs)})"
+        return f"({str(self.features())}, {str(self.sucs)})" # TODO order, meta
 
-    def to_conll(self):
+    def to_conll(self): # TODO review
         """
         return a dict representing self according to conll
         the labels of nodes are supposed to follow conll rules
@@ -95,131 +126,4 @@ class Graph(dict):
                     conllitems[v]['head'] = n
                     conllitems[v]['deprel'] = d
         return list(conllitems.values())
-
-
-        
-    
-
-
-
-def save(gr, filename):
-    req = { "command": "save_graph", "graph": json.dumps(gr), "filename": filename }
-    reply = network.send_and_receive(req)
-    return
-
-def add_node(g, s, a):
-    """
-    Add a node s labeled a in graph g
-    """
-    g[s] = (a, []) # ERROR
-
-def add_edge(gr, source, label, target):
-    """
-    Add an edge from [source] to [target] labeled [label] within [gr]
-    :param gr: the graph
-    :param source: the source node id
-    :param label: the label of edge between [source] and [target]
-    :param target: the target node id
-    :return:
-    """
-    if source not in gr:
-        raise utils.GrewError({"function": "grew.add_edge", "src": source, "message":"KeyError"})
-    elif target not in gr:
-        raise utils.GrewError({"function": "grew.add_edge", "tar": target, "message":"KeyError"})
-    else:
-        succs = gr[source][1]
-        if not (label, target) in succs:
-            succs.append((label, target))
-
-
-def insert_before(gr, label, pivot):
-    """
-    Add a new node to the ordered graph
-    :param gr: an ordered graph
-    :param label: the label of the new node
-    :param pivot: the new node will be put just before the node [pivot]
-    :return: the id of the new node
-    """
-    leftid = glb(gr, pivot)
-    nid = mid(leftid, pivot) if leftid else left(pivot)
-    gr[nid] = ('label="%s"'%(label), [])
-    return nid
-
-def insert_after(gr, label, pivot):
-    """
-    Add a new node to the ordered graph
-    :param gr: an ordered graph
-    :param label: the label of the new node
-    :param pivot: the new node will be put just after the node [pivot]
-    :return: the id of the new node
-    """
-    rightid = lub(gr, pivot)
-    nid = mid(rightid, pivot) if rightid else right(pivot)
-    gr[nid] = ('label="%s"'%(label), [])
-    return nid
-
-_canvas = None
-def draw(gr,format="dep"):
-    global _canvas
-    """Opens a window with the graph."""
-
-    if format == "dep":
-        png_file = dep_to_png(gr)
-    elif format == "dot":
-        png_file = dot_to_png(gr)
-    else:
-        raise GrewError('Unknown format: %s' % format)
-
-    if not _canvas:
-        import tkinter
-        from tkinter import Tk, Canvas, PhotoImage, NW
-        app = Tk()
-        _canvas = Canvas(app, width=900, height=500)
-        _canvas.pack()
-        pic = PhotoImage(file=png_file)
-        _canvas.create_image(0, 0, anchor=NW, image=pic)
-        app.mainloop()
-
-def dot_to_png(gr):
-    req = { "command": "dot_to_png", "graph": json.dumps(gr) }
-    return network.send_and_receive(req)
-
-def dep_to_png(gr):
-    req = { "command": "dep_to_png", "graph": json.dumps(gr) }
-    return network.send_and_receive(req)
-
-
-def search(pattern, gr):
-    """
-    Search for [pattern] into [gr]
-    :param patten: a string pattern
-    :param gr: the graph
-    :return: the list of matching of [pattern] into [gr]
-    """
-    try:
-        req = {
-            "command": "search",
-            "graph": json.dumps(gr),
-            "pattern": pattern
-        }
-        reply = network.send_and_receive(req)
-        return reply
-    except utils.GrewError as e:
-        raise utils.GrewError({"function": "grew.search", "message": e.value})
-
-
-def graph_svg(graph):
-    req = {
-        "command": "dep_to_svg",
-        "graph": json.dumps(graph),
-    }
-    return network.send_and_receive(req)
-
-
-def graph2dot(graph):
-    """
-    Transformation of a graph to a graphviz string
-    :param graph: a graph (dict)
-    :return: string
-    """
 

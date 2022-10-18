@@ -129,7 +129,7 @@ class GRS():
         self.packages = p
         self.rules = r
         self.strats = s
-        self.index = -1
+        self.index = index
 
     def __init__(self, data=None, **kwargs):
         """Load a grs stored in a file
