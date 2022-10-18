@@ -154,20 +154,20 @@ class GRS():
             print ("--------------------")
             print (json.dumps(json_data, indent=2))
             print ("--------------------")
-            for d in json_data["decls"]:
-                if 'strat_name' in d:
+            for k,v in json_data["decls"].items():
+                if isinstance(v, str): ## strat
                     pass
                     #TO BE IMPLEMENTED
                     # self.strats.append(Strategy(d['strat_name'], d['strat_def']))
-                elif 'package_name' in d:
-                    pass
-                    #TO BE IMPLEMENTED
-                elif 'rule_name' in d:
+                elif 'commands' in v: ## rule
                     pass
                     #self.rules.append(Rule(d['rule_name'],d['rule'],''))
                     #TO BE IMPLEMENTED
+                elif 'decls' in v: ## package
+                    pass
+                    #TO BE IMPLEMENTED
                 else:
-                    raise utils.GrewError(f"{d} is not part of a grs")
+                    raise utils.GrewError(f"{v} is not a valid decl")
         else:
             pass
             """
