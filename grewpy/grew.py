@@ -12,8 +12,6 @@ from graph import Graph
 
 ''' Library tools '''
 
-cpt = iter(range(2**30))#an iterator for implicit names
-
 def init(dev=False):
     """
     Initialize connection to GREW library
@@ -23,11 +21,7 @@ def init(dev=False):
 init()
 
 class ClauseList():
-    """
-    a list of things with an underlying name:
-    things may be json()'ed
-    """
-    def __init__(self,sort,*L):
+    def __init__(self,sort : str,*L):
         """
         sort in {"without", "pattern", "global"}
         L is a list of
@@ -88,8 +82,12 @@ class Command(list):
         c = ";".join(self)
         return f"commands {{{c}}}"
 
+    @classmethod
+    def from_json(cls, json_data):
+        return cls(*json_data)
+
 class Rule():
-    def __init__(self, request, cmd_list):
+    def __init__(self, request : Request, cmd_list : Command):
         self.request = request
         self.commands = cmd_list
 
@@ -98,94 +96,98 @@ class Rule():
         return {"request" : p, "commands" : self.commands}
 
     def __str__(self):
-        return f"rule{{{str(self.request)}\n{str(self.commands)}}}"
+        return f"{str(self.request)}\n{str(self.commands)}"
     
     @classmethod
     def from_json(cls,json_data):
         print(json_data)
         reqs = Request.from_json(json_data["request"])
-        cmds = json_data["commands"]
+        cmds = Command.from_json(json_data["commands"])
         return cls(reqs,cmds) 
 
-class Package:
+class Package(dict):
     """
     dict mapping names to rule/package/strategies"""
-    def __init__(self, json_data):
-        self.decls = dict()
+
+    @classmethod
+    def from_json(cls, json_data):
+        res = Package._from_json(json_data)
+        return cls(res)
+
+    def _from_json(json_data):
+        res = dict()
         for k,v in json_data.items():
             if isinstance(v,str):
-                self.decls[k] = v
+                res[k] = v
             elif "decls" in v: #it is a package
-                self.decls[k] = Package(v["decls"])
+                res[k] = Package.from_json(v["decls"])
             else:
-                self.decls[k] = Rule.from_json(v)
+                res[k] = Rule.from_json(v)
+        return res
 
     def json_data(self):
         elts = dict()
-        for k,v in self.decls.items():
+        for k,v in self.items():
             elts[k] = v if isinstance(v,str) else v.json_data()
         return {"decls" : elts}
 
     def __str__(self):
-        res = ""
-        for k,v in self.decls.items():
-            if isinstance(v,str):
-                res += f"strat {k} {{{ v}}}\n"
-            else:
-                res += str(v)
-        return f"package {{{res}}}"
+        res = [f"strat {k} {{{self[k]}}}" for k in self.strategies()] +\
+            [f"package {k} {{{str(self[k])}}}" for k in self.packages()] +\
+            [f"rule {k} {{{str(self[k])}}}" for k in self.rules()]
+        return "\n".join(res)
+
+    def rules(self):
+        return filter(lambda x: isinstance(self[x], Rule), self.__iter__())
+
+    def packages(self):
+        return filter(lambda x: isinstance(self[x], Package), self.__iter__())
+
+    def strategies(self):
+        return filter(lambda x: isinstance(self[x], str), self.__iter__())
+
 
 class GRS(Package):
 
     def load_grs(data):
         """load data (either a filename or a json encoded string) within grew"""
-        name = next(cpt)
         if not os.path.isfile(data):
             f = tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs")
             f.write(data)
             f.flush() # The file can be empty if we do not flush
             req = {"command": "load_grs", "filename": f.name}
             reply = network.send_request(req)
-            name = data
         else:
             req = {"command": "load_grs", "filename": data}
             reply = network.send_request(req)
         index = reply["index"]
-        return index,name
+        return index
 
-    def __init__(self, data=None, **kwargs):
+    def __init__(self,*args,**kwargs):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
         :or kwargs contains explicitly the parts of the grs
         :return: an integer index for latter reference to the grs
         :raise an error if the file was not correctly loaded
         """
-        if kwargs:
+        if args:
+            if isinstance(args[0],str):
+                index = GRS.load_grs(args[0])
+                req = {"command": "json_grs", "grs_index": index}
+                json_data = network.send_request(req)
+                res = Package._from_json(json_data["decls"])
+                super().__init__(res)
+                self.index = index
+            elif isinstance(args, str):
+                super().__init__(args[0])
+                self.index = 0
+        else:        
+            super().__init__(
+                kwargs.get("strats", dict())
+                | kwargs.get("packages", dict())
+                | kwargs.get("rules", dict()))
             self.index = 0
-            self.decls = dict()
-            if "strats" in kwargs:
-                self.decls |= kwargs["strats"]
-            if "rules" in kwargs:
-                for rname, rule in kwargs["rules"].items():
-                    self.decls[rname] = rule
-            if "package" in kwargs:
-                for pname, package in kwargs["packages"].items():
-                    self.decls[pname] = package
-
-        elif isinstance(data, str):
-            index,name = GRS.load_grs(data)
-            req = {"command": "json_grs", "grs_index": index}
-            json_data = network.send_request(req)
-            """
-            print ("--------------------")
-            print (json.dumps(json_data, indent=2))
-            print ("--------------------")
-            with open("hum.txt", "w") as f:
-                f.write(json.dumps(json_data, indent=2))
-            """
-            self.index = index
-            super().__init__(json_data["decls"])
-
+        
     def __str__(self):
         return super().__str__()
 
@@ -211,6 +213,12 @@ class GRS(Package):
         print("-------------------------")
         reply = network.send_request(req)
         return [Graph(s) for s in reply]
+
+
+    def __setitem__(self,x,v):
+        self.index = 0
+        super().__setitem__(x,v)
+
 
 class Corpus():
     def __init__(self,data):
@@ -263,6 +271,7 @@ class Corpus():
 
     def __iter__(self):
         return iter(self.sent_ids)
+
 
     def search(self,pattern):
         """
