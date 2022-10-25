@@ -23,5 +23,5 @@ package p_1 {
   }
 }
 
-strat p_1 { Iter (p_1) }  % all normal forms with package p_1
+strat p_1_anf { Iter (p_1) }  % all normal forms with package p_1
 strat p_1_onf { Onf (p_1) }   % one normal form with package p_1

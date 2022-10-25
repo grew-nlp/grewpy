@@ -3,18 +3,11 @@ Grew module : anything you want to talk about graphs
 Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
-from operator import ne
 import os.path
-import re
-import copy
 import tempfile
 import json
-from unicodedata import is_normalized
 
-#from grew import network
-#from grew import utils
 import network
-import utils
 from graph import Graph
 
 ''' Library tools '''
@@ -29,19 +22,20 @@ def init(dev=False):
     return network.init(dev)
 init()
 
-class NamedList():
+class ClauseList():
     """
     a list of things with an underlying name:
     things may be json()'ed
     """
     def __init__(self,sort,*L):
         """
+        sort in {"without", "pattern", "global"}
         L is a list of
-         - ";" separated clause or
+         - ";" separated clauses or
          - a list of items
          - they will be concatenated
         """
-        self.sort = sort
+        self.sort = sort 
         self.items = tuple()
         for elt in L:
             if isinstance(elt,str):
@@ -49,64 +43,94 @@ class NamedList():
             else:
                 self.items += tuple(elt)
 
-    def json(self):
-        t = [x.json() if "json" in dir(x) else x for x in self.items]
-        return f"{self.sort}{{{';'.join(t)}}}"
-    def __str__(self):
-        return f"{self.sort}{{{';'.join(self.items)}}}"
+    def json_data(self):
+        return {self.sort : self.items}
+    
+    @classmethod
+    def from_json(cls, json_data):
+        k = list(json_data)[0]
+        v = json_data[k]
+        return cls(k,*v)
 
-class Pattern():
+    def __str__(self):
+        its = ";".join([str(x) for x in self.items])
+        return f"{self.sort} {{{its}}}"
+
+class Request(list):
     def __init__(self, *L):
         """
-        L is a list of ClauseList or pairs (sort,clauses)
+        L is a list of ClauseList
         """
-        self.items = tuple(C if isinstance(C,NamedList) else NamedList(*C)
-                        for C in L)
+        elts = [e if isinstance(e,ClauseList) else ClauseList(*e) for e in L]
+        super().__init__(elts)
 
-    def json(self):
-        return "".join([C.json() for C in self.items])
+    @classmethod
+    def from_json(cls,json_data):
+        elts = [ClauseList.from_json(c) for c in json_data]
+        return cls(*elts)
 
-    def __getitem__(self,i):
-        return self.items[i]
-
+    def json_data(self):
+        return [x.json_data() for x in self]
+    
     def __str__(self):
-        return "\n".join([str(x) for x in self.items])
+        return "\n".join([str(e) for e in self])
 
-class Strategy():
-    def __init__(self,name, data):
-        self.data = data
-        self.name = name
-    def json(self):
-        return f'{{"type":"strat", "id": "{self.name}", "data" : "{self.data}"}}'
-    def __str__(self):
-        return f"strat {self.name} {{{self.data}}}"
-
-class Command():
+class Command(list):
     def __init__(self, *L):
-        self.items = []
+        super().__init__()
         for elt in L:
             if isinstance(elt,str):
-                self.items += [t.strip() for t in elt.split(";") if t.strip()]
+                self += [t.strip() for t in elt.split(";") if t.strip()]
             elif isinstance(elt,list):
-                self.items += elt
+                self += elt
 
     def __str__(self):
-        c = ";".join(self.items)
+        c = ";".join(self)
         return f"commands {{{c}}}"
 
 class Rule():
-    def __init__(self, name, pattern, cmds):
-        self.pattern = pattern
-        self.commands = cmds
-        self.name = name
-    def json(self):
-        p = self.pattern.json()
-        c = self.commands.json()
-        return f"rule {self.name} {{ {p}\n {c} }}"
-    def __str__(self):
-        return f"rule {self.name}{{{self.pattern}\n{self.commands}}}"
+    def __init__(self, request, cmd_list):
+        self.request = request
+        self.commands = cmd_list
 
-class GRS():
+    def json_data(self):
+        p = self.request.json_data()
+        return {"request" : p, "commands" : self.commands}
+
+    def __str__(self):
+        return f"rule{{{str(self.request)}\n{str(self.commands)}}}"
+    
+    @classmethod
+    def from_json(cls,json_data):
+        print(json_data)
+        reqs = Request.from_json(json_data["request"])
+        cmds = json_data["commands"]
+        return cls(reqs,cmds) 
+
+class Package:
+    """
+    dict mapping names to rule/package/strategies"""
+    def __init__(self, json_data):
+        self.decls = dict()
+        for k,v in json_data.items():
+            if isinstance(v,str):
+                self.decls[k] = v
+            elif "decls" in v: #it is a package
+                self.decls[k] = Package(v["decls"])
+            else:
+                self.decls[k] = Rule.from_json(v)
+
+    def json_data(self):
+        elts = dict()
+        for k,v in self.decls.items():
+            elts[k] = v if isinstance(v,str) else v.json_data()
+        return {"decls" : elts}
+
+    def __str__(self):
+        fields = {k : str(v) for k,v in self.decls.items()}
+        return json.dumps(fields)
+
+class GRS(Package):
 
     def load_grs(data):
         """load data (either a filename or a json encoded string) within grew"""
@@ -124,73 +148,37 @@ class GRS():
         index = reply["index"]
         return index,name
 
-    def __ii(self,n,p,s,r,index=-1):
-        self.name =n
-        self.packages = p
-        self.rules = r
-        self.strats = s
-        self.index = index
-
     def __init__(self, data=None, **kwargs):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
+        :or kwargs contains explicitly the parts of the grs
         :return: an integer index for latter reference to the grs
         :raise an error if the file was not correctly loaded
         """
-        if len(kwargs) > 0:
-            #explicit declaration
-            GRS.__ii(self,data if data else next(cpt), 
-            kwargs.get('packages', list()), 
-            kwargs.get('strats', list()),
-            kwargs.get('rules', list()))
-        elif data is None:
-            GRS.__ii(self,'',list(),list(),list())
-            return
+        if kwargs:
+            self.index = -1
+            self.decls = dict()
+            if "strats" in kwargs:
+                self.decls |= kwargs["strats"]
+            if "rules" in kwargs:
+                for rname, rule in kwargs["rules"].items():
+                    self.decls[rname] = rule
         elif isinstance(data, str):
             index,name = GRS.load_grs(data)
-            GRS.__ii(self,str(name),list(),list(),list(),index)
             req = {"command": "json_grs", "grs_index": index}
             json_data = network.send_request(req)
+            """
             print ("--------------------")
             print (json.dumps(json_data, indent=2))
             print ("--------------------")
-            for k,v in json_data["decls"].items():
-                if isinstance(v, str): ## strat
-                    pass
-                    #TO BE IMPLEMENTED
-                    # self.strats.append(Strategy(d['strat_name'], d['strat_def']))
-                elif 'commands' in v: ## rule
-                    pass
-                    #self.rules.append(Rule(d['rule_name'],d['rule'],''))
-                    #TO BE IMPLEMENTED
-                elif 'decls' in v: ## package
-                    pass
-                    #TO BE IMPLEMENTED
-                else:
-                    raise utils.GrewError(f"{v} is not a valid decl")
-        else:
-            pass
+            with open("hum.txt", "w") as f:
+                f.write(json.dumps(json_data, indent=2))
             """
-            TO BE IMPLEMENTED
-            """
-
-    # def json(self):
-    #     sts = ", ".join(
-    #         [f"{{'strat_name' : {s}, 'strat_def':{v}}}" for s, v in self.strats.items()])
-    #     pts = ", ".join([json.dumps(s) for s in self.packages])
-    #     return f'{{"filename": "{self.filename}", "decls": [{sts}, {pts}]}}'
-
-    def json(self):
-        return f'{{"name": "{self.name}", "strats": {self.strats}}}'
+            self.index = index
+            super().__init__(json_data["decls"])
 
     def __str__(self):
-        """
-        a string representation of self
-        """
-        sts = "\n".join([f"{s}" for s in self.strats])
-        rls = "\n".join([f"{r}" for r in self.rules])
-        return sts+"\n"+rls
-
+        return f'{{ "index" :{self.index}, "decls" : {super().__str__()} }}'
 
     def run(self, G, strat="main"):
         """
@@ -200,7 +188,7 @@ class GRS():
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
-        if self.index < 0: #not loaded
+        if not self.index: #not loaded
             index,_ = GRS.load_grs(str(self))
             self.index = index
         req = {
@@ -209,6 +197,9 @@ class GRS():
             "grs_index": self.index,
             "strat": strat
         }
+        print("---------------------")
+        print(req)
+        print("-------------------------")
         reply = network.send_request(req)
         return [Graph(s) for s in reply]
 

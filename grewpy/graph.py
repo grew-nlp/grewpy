@@ -98,14 +98,14 @@ class Graph():
         return s + '\n}'
 
     def json(self):
-        nds = json.dumps({c:self[c] for c in self.features})
+        nds = {c:self[c] for c in self.features}
         edg_list = []
         for n in self.sucs:
             for (e,s) in self.sucs[n]:
-                edg_list += [f'{{"src":"{n}", "label":"{e}","tar":"{s}"}}'] # TODO fix with json.dumps
-        edg = ",".join (edg_list)
-        # TODO add meta and order
-        return f'{{ "nodes": {nds}, "edges":[{edg}]}}'
+                edg_list.append({"src":f"{n}", "label":f"{s}","tar":f"{e}"}) 
+        json_data ={"nodes" : nds, "edges" : edg_list}
+        js = json.dumps(json_data, indent=4)
+        return js
 
     def __str__(self):
         return f"({str(self.features())}, {str(self.sucs)})" # TODO order, meta
