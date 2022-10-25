@@ -127,8 +127,13 @@ class Package:
         return {"decls" : elts}
 
     def __str__(self):
-        fields = {k : str(v) for k,v in self.decls.items()}
-        return json.dumps(fields)
+        res = ""
+        for k,v in self.decls.items():
+            if isinstance(v,str):
+                res += f"strat {k} {{{ v}}}\n"
+            else:
+                res += str(v)
+        return f"package {{{res}}}"
 
 class GRS(Package):
 
@@ -182,7 +187,7 @@ class GRS(Package):
             super().__init__(json_data["decls"])
 
     def __str__(self):
-        return f'{{ "index" :{self.index}, "decls" : {super().__str__()} }}'
+        return super().__str__()
 
     def run(self, G, strat="main"):
         """
