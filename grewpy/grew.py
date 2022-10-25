@@ -156,13 +156,17 @@ class GRS(Package):
         :raise an error if the file was not correctly loaded
         """
         if kwargs:
-            self.index = -1
+            self.index = 0
             self.decls = dict()
             if "strats" in kwargs:
                 self.decls |= kwargs["strats"]
             if "rules" in kwargs:
                 for rname, rule in kwargs["rules"].items():
                     self.decls[rname] = rule
+            if "package" in kwargs:
+                for pname, package in kwargs["packages"].items():
+                    self.decls[pname] = package
+
         elif isinstance(data, str):
             index,name = GRS.load_grs(data)
             req = {"command": "json_grs", "grs_index": index}
