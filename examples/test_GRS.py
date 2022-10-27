@@ -54,10 +54,12 @@ print (len (graph_list_3))
 print ("\n============================== TEST 3 ==============================")
 print ("  Build a GRS with explicit values")
 
-pat_det_n = grew.Request(grew.pattern("N1[upos=DET]; N2[upos=NOUN]; N1 < N2"), grew.without("N2 -> N1"))
+req_det_n = grew.Request("N1[upos=DET]","N2[upos=NOUN]; N1 < N2").without("N2 -> N1")
+#alt syntax: grew.Request(grew.pattern("N1[upos=DET]; N2[upos=NOUN]; N1 < N2"), grew.without("N2 -> N1"))
 add_det_cde = grew.Command("add_edge N2 -[det]-> N1")
-R = grew.Rule(pat_det_n, add_det_cde)
+R = grew.Rule(req_det_n, add_det_cde)
 grs = grew.GRS({"det":R,"s1":"det","s2":"Onf(det)","s3":"Iter(det)"})
+#alt grs = grew.GRS(det=R,s1="det",s2="Onf(det)",s3="Iter(det)")
 print ("------------- print (grs) -------------")
 print (grs)
 
@@ -69,7 +71,7 @@ print (len (graph_list_1))
 print (len (graph_list_2))
 print (len (graph_list_3))
 
-print("----------------test if grs can be loaded-------------")
+print("----------------test if grs can be saved-------------")
 with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".gr") as f:
     f.write(str(grs))
     f.flush()  # to be read by others

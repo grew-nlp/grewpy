@@ -56,13 +56,22 @@ class ClauseList():
         return f"{self.sort} {{{its}}}"
 
 class Request():
+    """
+    lists of ClauseList
+    """
     def __init__(self, *L):
         """
-        L is a list of ClauseList
+        L is either a list of 
+         - ClauseList or
+         - (pattern) string
         """
-        elts = tuple(e if isinstance(e,ClauseList) else ClauseList(*e) for e in L)
+        elts = tuple(e if isinstance(e,ClauseList) else ClauseList("pattern",e) for e in L)
         self.items = elts
 
+    def without(self, *L):
+        self.items += tuple(ClauseList("without", e) for e in L)
+        return self   
+        
     @classmethod
     def from_json(cls,json_data):
         elts = [ClauseList.from_json(c) for c in json_data]
