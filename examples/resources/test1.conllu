@@ -1,0 +1,8 @@
+# sent_id = n01027007
+# text = le chat mange la souris
+1	le	le	DET	_	_	_	_	_	_
+2	chat	chat	NOUN	_	_	_	_	_	_
+3	mange	manger	VERB	_	_	_	_	_	_
+4	la	le	DET	_	_	_	_	_	_
+5	souris	souris	NOUN	_	_	_	_	_	_
+

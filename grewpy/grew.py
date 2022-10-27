@@ -100,7 +100,7 @@ class Rule():
     
     @classmethod
     def from_json(cls,json_data):
-        print(json_data)
+        # print(json_data)
         reqs = Request.from_json(json_data["request"])
         cmds = Command.from_json(json_data["commands"])
         return cls(reqs,cmds) 
@@ -149,19 +149,24 @@ class Package(dict):
 
 class GRS(Package):
 
-    def load_grs(data):
+    def _load(data):
         """load data (either a filename or a json encoded string) within grew"""
-        if not os.path.isfile(data):
-            f = tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".grs")
-            f.write(data)
-            f.flush() # The file can be empty if we do not flush
-            req = {"command": "load_grs", "filename": f.name}
-            reply = network.send_request(req)
-        else:
+        if os.path.isfile(data):
             req = {"command": "load_grs", "filename": data}
-            reply = network.send_request(req)
+        else:
+            req = {"command": "load_grs", "str": data}
+        reply = network.send_request(req)
         index = reply["index"]
         return index
+
+    def _build(self):
+        """ ensure that the GRS is loaded (and call Ocaml if needed)"""
+        if not self.index:
+            data = self.json_data()
+            req = {"command": "load_grs", "json": data}
+            reply = network.send_request(req)
+            index = reply["index"]
+            self.index = index
 
     def __init__(self,*args,**kwargs):
         """Load a grs stored in a file
@@ -172,7 +177,7 @@ class GRS(Package):
         """
         if args:
             if isinstance(args[0],str):
-                index = GRS.load_grs(args[0])
+                index = GRS._load(args[0])
                 req = {"command": "json_grs", "grs_index": index}
                 json_data = network.send_request(req)
                 res = Package._from_json(json_data["decls"])
@@ -199,18 +204,16 @@ class GRS(Package):
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
-        if not self.index: #not loaded
-            index,_ = GRS.load_grs(str(self))
-            self.index = index
+        self._build() # first ensure that the GRS is loaded in Ocaml
         req = {
             "command": "run",
             "graph": G.json(),
             "grs_index": self.index,
             "strat": strat
         }
-        print("---------------------")
-        print(req)
-        print("-------------------------")
+        # print("---------------------")
+        # print(req)
+        # print("-------------------------")
         reply = network.send_request(req)
         return [Graph(s) for s in reply]
 
