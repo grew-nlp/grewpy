@@ -20,6 +20,11 @@ def init(dev=False):
     return network.init(dev)
 init()
 
+def pattern(s):
+    return ("pattern", s)
+def without(s):
+    return ("without",s)
+
 class ClauseList():
     def __init__(self,sort : str,*L):
         """
@@ -168,29 +173,22 @@ class GRS(Package):
             index = reply["index"]
             self.index = index
 
-    def __init__(self,*args,**kwargs):
+    def __init__(self,args):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
         :or kwargs contains explicitly the parts of the grs
         :return: an integer index for latter reference to the grs
         :raise an error if the file was not correctly loaded
         """
-        if args:
-            if isinstance(args[0],str):
-                index = GRS._load(args[0])
-                req = {"command": "json_grs", "grs_index": index}
-                json_data = network.send_request(req)
-                res = Package._from_json(json_data["decls"])
-                super().__init__(res)
-                self.index = index
-            elif isinstance(args[0], dict):
-                super().__init__(args[0])
-                self.index = 0
-        else:        
-            super().__init__(
-                kwargs.get("strats", dict())
-                | kwargs.get("packages", dict())
-                | kwargs.get("rules", dict()))
+        if isinstance(args,str):
+            index = GRS._load(args)
+            req = {"command": "json_grs", "grs_index": index}
+            json_data = network.send_request(req)
+            res = Package._from_json(json_data["decls"])
+            super().__init__(res)
+            self.index = index
+        elif isinstance(args, dict):        
+            super().__init__( args )
             self.index = 0
         
     def __str__(self):
