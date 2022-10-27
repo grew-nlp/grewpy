@@ -1,0 +1,9 @@
+rule det {
+  pattern { N1[upos=DET]; N2[upos=NOUN]; N1 < N2 }
+  without { N2 -> N1 }
+  commands { add_edge N2 -[det]-> N1}
+}
+
+strat s1 { det }
+strat s2 { Onf (det) }
+strat s3 { Iter (det) }
