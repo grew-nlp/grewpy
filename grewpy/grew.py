@@ -50,13 +50,13 @@ class ClauseList():
         its = ";".join([str(x) for x in self.items])
         return f"{self.sort} {{{its}}}"
 
-class Request(list):
+class Request():
     def __init__(self, *L):
         """
         L is a list of ClauseList
         """
-        elts = [e if isinstance(e,ClauseList) else ClauseList(*e) for e in L]
-        super().__init__(elts)
+        elts = tuple(e if isinstance(e,ClauseList) else ClauseList(*e) for e in L)
+        self.items = elts
 
     @classmethod
     def from_json(cls,json_data):
@@ -64,10 +64,10 @@ class Request(list):
         return cls(*elts)
 
     def json_data(self):
-        return [x.json_data() for x in self]
+        return [x.json_data() for x in self.items]
     
     def __str__(self):
-        return "\n".join([str(e) for e in self])
+        return "\n".join([str(e) for e in self.items])
 
 class Command(list):
     def __init__(self, *L):
@@ -178,7 +178,7 @@ class GRS(Package):
                 res = Package._from_json(json_data["decls"])
                 super().__init__(res)
                 self.index = index
-            elif isinstance(args, str):
+            elif isinstance(args[0], dict):
                 super().__init__(args[0])
                 self.index = 0
         else:        
