@@ -102,8 +102,8 @@ class Graph():
         edg_list = []
         for n in self.sucs:
             for (e,s) in self.sucs[n]:
-                edg_list.append({"src":f"{n}", "label":f"{s}","tar":f"{e}"}) 
-        json_data ={"nodes" : nds, "edges" : edg_list}
+                edg_list.append({"src":f"{n}", "label":f"{s}","tar":f"{e}"})
+        json_data ={"nodes" : nds, "edges" : edg_list, "order": self.order }
         js = json.dumps(json_data, indent=4)
         return js
 
