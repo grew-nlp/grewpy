@@ -1,9 +1,8 @@
-from audioop import mul
-from context import grewpy
+import sys, os
+
+sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
 from utils import multi_append
-
-c = grew.Corpus("test.conllu") #UD_French-PUD/fr_pud-ud-test.conllu")
 
 def parse_edge(m,e_name):
     """
@@ -29,10 +28,7 @@ def cluster(c,P,n1,n2):
     for matching in c.search(P):
         pair(c,matching,obs,n1,n2)
     for u1,u2 in obs:
-        W = grew.Pattern(
-            ("pattern", f"Y[upos={u2}];X[upos={u1}]"), 
-            P[1],
-            ("without", ["X -> Y"]))
+        W = grew.Pattern(f"Y[upos={u2}];X[upos={u1}]", P[1]).without("X -> Y")
         obs[(u1, u2)][""] = c.count(W)
     return obs
 
@@ -46,9 +42,9 @@ def rank0(c):
     """
     builds all rank 0 rules
     """
-    Plr = grew.Pattern(("pattern", "X<Y"), ("pattern", "e:X -> Y"))
+    Plr = grew.Request("X<Y","e:X -> Y")
     obslr = cluster(c, Plr, "X", "Y") #left to right
-    Prl = grew.Pattern(("pattern", "Y<X"), ("pattern", "e:X -> Y"))
+    Prl = grew.Request(("pattern", "Y<X"), ("pattern", "e:X -> Y"))
     obsrl = cluster(c, Prl, "X", "Y")
     rules = []
     for (p1,p2),es in obslr.items():
@@ -67,31 +63,34 @@ def rank0(c):
             rules.append(R)
     return rules
 
-R0 = rank0(c)
-gcs = {sid : c[sid] for sid in c}#set of graphs
-g0s = {sid : c[sid] for sid in c} #a copy of the graphs
-for sid,g in g0s.items():
-    for n in g:
-        g.sucs[n]=[] #trash all edges in g0s
-
-def verify(gs,hs):
-    recall, found = 0,0
-    for sid,g in gs.items():
+def verify(gs, hs):
+    recall, found = 0, 0
+    for sid, g in gs.items():
         for n in g:
-            for e,s in g.sucs[n]:
-                if (e,s) in hs[sid].sucs[n]:
+            for e, s in g.sucs[n]:
+                if (e, s) in hs[sid].sucs[n]:
                     found += 1
                 else:
                     recall += 1
     return found, recall
 
-print(verify(g0s,gcs))
-print(len(R0))  
-Rs0 = grew.GRS("rank0",rules=R0,
+if __name__ == "__main__":
+    c = grew.Corpus("examples/resources/fr_pud-ud-test.conllu")
+    R0 = rank0(c)
+    gcs = {sid : c[sid] for sid in c}#set of graphs
+    g0s = {sid : c[sid] for sid in c} #a copy of the graphs
+    for sid,g in g0s.items():
+        for n in g:
+            g.sucs[n]=[] #trash all edges in g0s
+
+
+    print(verify(g0s,gcs))
+    print(len(R0))  
+    Rs0 = grew.GRS("rank0",rules=R0,
                        strats=[grew.Strategy('main',f'Onf(Alt({",".join([r.name for r in R0])}))')])
 
 
-g1s = {
-    sid : Rs0.run(g0s[sid], 'main')[0] 
-    for sid in g0s}
-print(verify(g1s,gcs))
+    g1s = {
+        sid : Rs0.run(g0s[sid], 'main')[0] 
+        for sid in g0s}
+    print(verify(g1s,gcs))

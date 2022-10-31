@@ -3,12 +3,14 @@ Grew module : anything you want to talk about graphs
 Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
+from multiprocessing.sharedctypes import Value
 import os.path
 import tempfile
 import json
 
 import network
 from graph import Graph
+from utils import GrewError
 
 ''' Library tools '''
 
@@ -43,7 +45,7 @@ class ClauseList():
                 self.items += tuple(elt)
 
     def json_data(self):
-        return {self.sort : self.items}
+        return {self.sort : list(self.items)}
     
     @classmethod
     def from_json(cls, json_data):
@@ -248,7 +250,10 @@ class Corpus():
                 f.write(data)
                 f.flush()  # to be read by others
                 req = { "command": "load_corpus", "files": [f.name] }
-                reply = network.send_request(req)
+                try:
+                    reply = network.send_request(req)
+                except GrewError:
+                    raise GrewError(data)
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
         self.sent_ids = network.send_request(req)
@@ -283,7 +288,7 @@ class Corpus():
         return iter(self.sent_ids)
 
 
-    def search(self,pattern):
+    def search(self,request):
         """
         Search for [pattern] into [corpus_index]
         :param patten: a string pattern
@@ -293,7 +298,7 @@ class Corpus():
         return network.send_request({
             "command": "corpus_search",
             "corpus_index": self.id,
-            "pattern": pattern.json(),
+            "request": request.json_data(),
             })
 
     def count(self,pattern):

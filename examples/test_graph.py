@@ -1,7 +1,7 @@
 import sys
 import os.path
 
-sys.path.insert(0,os.path.abspath("grewpy")) # Use local grew lib
+sys.path.insert(0,os.path.abspath("./grewpy")) # Use local grew lib
 import grew
 
 g_str = """

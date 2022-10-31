@@ -72,18 +72,14 @@ print (len (graph_list_2))
 print (len (graph_list_3))
 
 print("----------------test if grs can be saved-------------")
-with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".gr") as f:
-    f.write(str(grs))
-    f.flush()  # to be read by others
-    name = f.name
-    grs2 = grew.GRS(f.name)
-    print(grs2)
+s = str(grs)
+grs2 = grew.GRS(s)
+print(grs2)
 
 print("\n============================== TEST 4 ==============================")
 print("  Visiting a GRS")
 print("------------- print (rules of grs) -------------")
 for d in grs.rules():
     print(f"rule name: {d}\n{grs[d]} \n")
-
 
 exit(0)
