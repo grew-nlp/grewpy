@@ -14,13 +14,12 @@ print ("------------- print (grs) -------------")
 print (grs)
 
 
-graph_list_1 = grs.run(graph, strat="s1")
-graph_list_2 = grs.run(graph, strat="s2")
-graph_list_3 = grs.run(graph, strat="s3")
-
-print (len (graph_list_1))
-print (len (graph_list_2))
-print (len (graph_list_3))
+print ("nb of output with strat s1 (should be 2) ---> ", end='')
+print (len (grs.run(graph, strat="s1")))
+print ("nb of output with strat s2 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s2")))
+print ("nb of output with strat s3 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s3")))
 
 
 print ("\n============================== TEST 2 ==============================")
@@ -41,14 +40,12 @@ grs = grew.GRS(string_grs)
 print ("------------- print (grs) -------------")
 print (grs)
 
-
-graph_list_1 = grs.run(graph, strat="s1")
-graph_list_2 = grs.run(graph, strat="s2")
-graph_list_3 = grs.run(graph, strat="s3")
-
-print (len (graph_list_1))
-print (len (graph_list_2))
-print (len (graph_list_3))
+print ("nb of output with strat s1 (should be 2) ---> ", end='')
+print (len (grs.run(graph, strat="s1")))
+print ("nb of output with strat s2 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s2")))
+print ("nb of output with strat s3 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s3")))
 
 
 print ("\n============================== TEST 3 ==============================")
@@ -63,13 +60,12 @@ grs = grew.GRS({"det":R,"s1":"det","s2":"Onf(det)","s3":"Iter(det)"})
 print ("------------- print (grs) -------------")
 print (grs)
 
-graph_list_1 = grs.run(graph, strat="s1")
-graph_list_2 = grs.run(graph, strat="s2")
-graph_list_3 = grs.run(graph, strat="s3")
-
-print (len (graph_list_1))
-print (len (graph_list_2))
-print (len (graph_list_3))
+print ("nb of output with strat s1 (should be 2) ---> ", end='')
+print (len (grs.run(graph, strat="s1")))
+print ("nb of output with strat s2 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s2")))
+print ("nb of output with strat s3 (should be 1) ---> ", end='')
+print (len (grs.run(graph, strat="s3")))
 
 print("----------------test if grs can be saved-------------")
 s = str(grs)
