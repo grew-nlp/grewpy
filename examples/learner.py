@@ -3,6 +3,10 @@ import sys, os
 sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
 from utils import multi_append
+from grew import Corpus, Request
+
+Observation = dict[tuple[str,str],dict[str,int]]
+#Observation is a dict mapping('VERB', 'NOUN') to {'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 
 def parse_edge(m,e_name):
     """
@@ -16,19 +20,25 @@ def parse_edge(m,e_name):
             return f"1={label['1']},2={label['2']}"
     raise ValueError(m[e_name]['label'])
 
-def pair(c,matching,e,n1,n2):#append the matching in e
+def pair(c : Corpus,matching,e,n1,n2):#append the matching in e
     G = c[matching['sent_id']]
     P1 = G[matching['matching']['nodes'][n1]].get("upos", "")
     P2 = G[matching['matching']['nodes'][n2]].get("upos", "")
     if P1 and P2:
         multi_append(e, (P1, P2), parse_edge(matching['matching']['edges'],'e'))
 
-def cluster(c,P,n1,n2):
+def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
+    """
+    search for P within c
+    n1 and n2 are nodes within P
+    
+    """
     obs = dict()
-    for matching in c.search(P):
+    P1 = Request(P, f'e:{n1} -> {n2}')
+    for matching in c.search(P1):
         pair(c,matching,obs,n1,n2)
-    for u1,u2 in obs:
-        W = grew.Pattern(f"Y[upos={u2}];X[upos={u1}]", P[1]).without("X -> Y")
+    for u1,u2 in obs: #take into account there is no edge between X and Y
+        W = Request(P,f"Y[upos={u2}];X[upos={u1}]").without("X -> Y")
         obs[(u1, u2)][""] = c.count(W)
     return obs
 
@@ -38,13 +48,13 @@ def anomaly(obs):
         if obs[x] > 0.95 * s and x:
             return x
 
-def rank0(c):
+def rank0(c : Corpus):
     """
     builds all rank 0 rules
     """
-    Plr = grew.Request("X<Y","e:X -> Y")
+    Plr = Request("X<Y")
     obslr = cluster(c, Plr, "X", "Y") #left to right
-    Prl = grew.Request(("pattern", "Y<X"), ("pattern", "e:X -> Y"))
+    Prl = Request("Y<X")
     obsrl = cluster(c, Prl, "X", "Y")
     rules = []
     for (p1,p2),es in obslr.items():
@@ -75,14 +85,13 @@ def verify(gs, hs):
     return found, recall
 
 if __name__ == "__main__":
-    c = grew.Corpus("examples/resources/fr_pud-ud-test.conllu")
+    c = Corpus("examples/resources/fr_pud-ud-test.conllu")
     R0 = rank0(c)
     gcs = {sid : c[sid] for sid in c}#set of graphs
     g0s = {sid : c[sid] for sid in c} #a copy of the graphs
     for sid,g in g0s.items():
         for n in g:
             g.sucs[n]=[] #trash all edges in g0s
-
 
     print(verify(g0s,gcs))
     print(len(R0))  

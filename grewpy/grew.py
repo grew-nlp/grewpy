@@ -65,9 +65,19 @@ class Request():
         """
         L is either a list of 
          - ClauseList or
-         - (pattern) string
+         - (pattern) string or a 
+         - Request (for copies)
         """
-        elts = tuple(e if isinstance(e,ClauseList) else ClauseList("pattern",e) for e in L)
+        elts = tuple()
+        for e in L:
+            if isinstance(e,str):
+                elts += (ClauseList("pattern", e),)
+            elif isinstance(e,ClauseList):
+                elts += (e,)
+            elif isinstance(e,Request):
+                elts += e.items
+            else:
+                raise ValueError(f"{e} cannot be used to build a Request")
         self.items = elts
 
     def without(self, *L):
@@ -301,7 +311,7 @@ class Corpus():
             "request": request.json_data(),
             })
 
-    def count(self,pattern):
+    def count(self,request):
         """
         Count for [pattern] into [corpus_index]
         :param patten: a string pattern
@@ -311,5 +321,5 @@ class Corpus():
         return network.send_request({
             "command": "corpus_count",
             "corpus_index": self.id,
-            "pattern": pattern.json(),
+            "pattern": request.json_data(),
             })
