@@ -300,10 +300,10 @@ class Corpus():
 
     def search(self,request):
         """
-        Search for [pattern] into [corpus_index]
-        :param patten: a string pattern
+        Search for [request] into [corpus_index]
+        :param request: a string request
         :param corpus_index: an integer given by the [corpus] function
-        :return: the list of matching of [pattern] into the corpus
+        :return: the list of matching of [request] into the corpus
         """
         return network.send_request({
             "command": "corpus_search",
@@ -313,13 +313,13 @@ class Corpus():
 
     def count(self,request):
         """
-        Count for [pattern] into [corpus_index]
-        :param patten: a string pattern
+        Count for [request] into [corpus_index]
+        :param request: a string request
         :param corpus_index: an integer given by the [corpus] function
-        :return: the number of matching of [pattern] into the corpus
+        :return: the number of matching of [request] into the corpus
         """
         return network.send_request({
             "command": "corpus_count",
             "corpus_index": self.id,
-            "pattern": request.json_data(),
+            "request": request.json_data(),
             })
