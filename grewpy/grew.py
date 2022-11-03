@@ -22,6 +22,19 @@ def init(dev=False):
     return network.init(dev)
 init()
 
+def set_config(data):
+    """
+    Change the configuration used in the next exchanges
+    See https://grew.fr/doc/graph/#edges for details about config
+    """
+    try:
+        req = { "command": "set_config", "config": data }
+        reply = network.send_and_receive(req)
+        return reply
+    except GrewError as e: 
+        raise GrewError({"function": "grew.set_config", "data":data, "message":e.value})
+
+
 def pattern(s):
     return ("pattern", s)
 def without(s):

@@ -3,6 +3,8 @@ import sys,os
 sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
 
+grew.set_config("sud")
+
 corpus = grew.Corpus("examples/resources/test1.conllu")
 graph = corpus[0]
 
