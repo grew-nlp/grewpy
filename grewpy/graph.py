@@ -110,20 +110,12 @@ class Graph():
     def __str__(self):
         return f"({str(self.features())}, {str(self.sucs)})" # TODO order, meta
 
-    def to_conll(self): # TODO review
+    def to_conll(self):
         """
-        return a dict representing self according to conll
-        the labels of nodes are supposed to follow conll rules
-        the graph itself should be a sub graph of a tree 
+        return a CoNLL string for the given graph
         """
-        conllitems = {n : {k: self[n].get(k,'_') for k in ['id', 'form', 'lemma',
-                                               'upos', 'xpos', 'feats', 'head', 'deprel','misc', 'deps']} 
-                                               for n in self if n and n != '0'}
-        for n, nsucs in self.sucs.items():
-            if n and n != '0': #remove the "0" node
-                conllitems[n]['id'] = n
-                for d,v in nsucs:
-                    conllitems[v]['head'] = n
-                    conllitems[v]['deprel'] = d
-        return list(conllitems.values())
+        data = self.json()
+        req = {"command": "conll_graph", "graph": data}
+        reply = network.send_request(req)
+        return reply
 
