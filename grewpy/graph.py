@@ -33,6 +33,10 @@ class Fs_edge(dict):
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
+    def __hash__(self):
+        A = sorted([(k,v) for (k,v) in self.items()])
+        return hash(tuple(A))
+
 class Graph():
     """
     a dict mapping node keys to feature structure
@@ -79,6 +83,9 @@ class Graph():
 
     def __getitem__(self, nid):
         return (self.features[nid])
+
+    def __iter__(self):
+        return iter(self.features)
 
     def suc(self, nid):
         #return self.sucs[nid] if nid in self.sucs else 
