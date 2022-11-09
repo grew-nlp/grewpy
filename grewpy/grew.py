@@ -7,12 +7,15 @@ from multiprocessing.sharedctypes import Value
 import os.path
 import tempfile
 import json
+import typing
 
 import network
 from graph import Graph
 from utils import GrewError
 
 ''' Library tools '''
+
+JSON = dict[str,typing.Any] | list[typing.Any] | str | int
 
 def init(dev=False):
     """
@@ -33,12 +36,6 @@ def set_config(data):
         return reply
     except GrewError as e: 
         raise GrewError({"function": "grew.set_config", "data":data, "message":e.value})
-
-
-def pattern(s):
-    return ("pattern", s)
-def without(s):
-    return ("without",s)
 
 class ClauseList():
     def __init__(self,sort : str,*L):
@@ -61,7 +58,7 @@ class ClauseList():
         return {self.sort : list(self.items)}
     
     @classmethod
-    def from_json(cls, json_data):
+    def from_json(cls, json_data : JSON) :
         k = list(json_data)[0]
         v = json_data[k]
         return cls(k,*v)
@@ -336,3 +333,14 @@ class Corpus():
             "corpus_index": self.id,
             "request": request.json_data(),
             })
+
+    def map(self, app, inplace=False):
+        x = {sid : map(self[sid]) for sid in self}
+        #load(x)
+
+    def init(self, dictionnaire):
+        pass
+
+    def run(self, grs : GRS, strat : str="main"):
+        pass
+
