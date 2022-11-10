@@ -2,9 +2,9 @@ import sys, os
 
 sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
-from utils import multi_append
-from grew import Request, Command, Rule, Graph
+from grew import Request, Command, Rule
 from corpus import Corpus
+from graph import Graph
 import numpy as np
 
 #type declaration
@@ -13,35 +13,18 @@ Observation = dict[tuple[str,str],Count]
 #Observation is a dict mapping('VERB', 'NOUN') to {'' : 10, 'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 #'' meaning no relationships
 
-def parse_edge(m,e_name):
-    """
-    m is a matching
-    """
-    label = m[e_name]['label']
-    if isinstance(label,str):
-        return label
-    elif isinstance(label,dict):
-        if '1' in label and '2' in label:
-            return f"1={label['1']},2={label['2']}"
-    raise ValueError(m[e_name]['label'])
-
-def pair(c : Corpus,matching,e,n1,n2):#append the matching in e
-    G = c[matching['sent_id']]
-    P1 = G[matching['matching']['nodes'][n1]].get("upos", "")
-    P2 = G[matching['matching']['nodes'][n2]].get("upos", "")
-    if P1 and P2:
-        multi_append(e, (P1, P2), parse_edge(matching['matching']['edges'],'e'))
-
 def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     search for P within c
     n1 and n2 are nodes within P
-    
     """
     obs = dict()
     P1 = Request(P, f'e:{n1} -> {n2}')
-    for matching in c.search(P1):
-        pair(c,matching,obs,n1,n2)
+    clustered = c.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
+    # turn dict[str,dict[str,Count]] into Observation
+    for (upos1, sub_clustered) in clustered.items():
+        for (upos2, edge_count) in sub_clustered.items():
+            obs[(upos1, upos2)] = edge_count
     for u1,u2 in obs: #take into account there is no edge between X and Y
         W = Request(P,f"Y[upos={u2}];X[upos={u1}]").without("X -> Y")
         obs[(u1, u2)][""] = c.count(W)
@@ -104,5 +87,6 @@ if __name__ == "__main__":
     print(verify(g0s,corpus))
     print(len(R0))  
     Rs0 = grew.GRS(R0 | {'main' : f'Onf(Alt({",".join([r for r in R0])}))'})
+
     g1s = { sid : Rs0.run(g0s[sid], 'main')[0] for sid in g0s}
     print(verify(g1s,corpus))
