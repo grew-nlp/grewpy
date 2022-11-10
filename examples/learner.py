@@ -70,7 +70,7 @@ def rank0(c : Corpus) -> dict[str,Rule]:
             rules[f"_{p1}_lr_{p2}_"] = R
     for (p1, p2), es in obsrl.items():
         if x := anomaly(es):
-            P = Request(f"X[upos={p1}], Y[upos={p2}], Y < X").without(f"X-[{x}]->Y")
+            P = Request(f"X[upos={p1}]; Y[upos={p2}]; Y < X").without(f"X-[{x}]->Y")
             R = Rule(P,Command(f"add_edge X-[{x}]->Y"))
             rules[f"_{p1}_rl_{p2}_"] = R
     return rules
