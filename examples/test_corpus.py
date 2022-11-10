@@ -1,10 +1,11 @@
 import sys, os
 sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
+from corpus import Corpus
 import conllu
 
 pud_file = "resources/fr_pud-ud-test.conllu"
-pud = grew.Corpus("examples/resources/fr_pud-ud-test.conllu")
+pud = Corpus("examples/resources/fr_pud-ud-test.conllu")
 
 print (pud.id)
 
