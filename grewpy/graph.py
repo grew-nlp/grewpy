@@ -7,10 +7,9 @@ import copy
 import tempfile
 import json
 
-#from grew import utils
-#from grew import network
-import utils
-import network
+from .utils import GrewError
+from .network import send_and_receive
+from . import utils
 
 ''' interfaces'''
 
@@ -18,7 +17,7 @@ class Fs_node(dict):
     def __init__(self,data):
         if isinstance(data,str):
             d = {"label": data}
-            super().__init__(d) 
+            super().__init__(d)
         elif isinstance(data, dict):
             super().__init__(data)
         else:
@@ -27,7 +26,7 @@ class Fs_node(dict):
 class Fs_edge(dict):
     def __init__(self,data):
         if isinstance(data,str):
-            super().__init__({"1": data}) 
+            super().__init__({"1": data})
         elif isinstance(data, dict):
             super().__init__(data)
         else:
@@ -47,7 +46,7 @@ class Graph():
         :param data: either None=>empty graph
         a string: a json representation => read json
         a json-decoded representation => fill with json
-        an oterh graph => copy the dict 
+        an oterh graph => copy the dict
         :return: a graph
         """
         self.features = dict()
@@ -88,7 +87,7 @@ class Graph():
         return iter(self.features)
 
     def suc(self, nid):
-        #return self.sucs[nid] if nid in self.sucs else 
+        #return self.sucs[nid] if nid in self.sucs else
         return self.sucs.get(nid, [])
 
     def to_dot(self): # TODO fix it
@@ -125,4 +124,3 @@ class Graph():
         req = {"command": "conll_graph", "graph": data}
         reply = network.send_request(req)
         return reply
-

@@ -8,10 +8,11 @@ import tempfile
 import json
 import typing
 
-import network
-from graph import Graph
+from .network import send_and_receive
+from .graph import Graph
 #from grew import GRS
-from utils import GrewError
+from .utils import GrewError
+from . import network
 
 
 class Corpus():
@@ -105,11 +106,10 @@ class Corpus():
 
     def delete(self, key_list):
         ...
-    
+
 
     def init(self, dictionnaire):
         pass
 
     def run(self, grs, strat : str="main"):
         pass
-

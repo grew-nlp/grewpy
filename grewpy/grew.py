@@ -8,9 +8,12 @@ import tempfile
 import json
 import typing
 
-import network
-from graph import Graph
-from utils import GrewError
+#from .network import send_and_receive, init
+from .graph import Graph
+from .utils import GrewError
+from .network import init as ninit
+
+from . import network
 
 ''' Library tools '''
 
@@ -21,7 +24,7 @@ def init(dev=False):
     Initialize connection to GREW library
     :return: the ouput of the subprocess.Popen command.
     """
-    return network.init(dev)
+    return ninit(dev)
 init()
 
 def set_config(data):
@@ -33,7 +36,7 @@ def set_config(data):
         req = { "command": "set_config", "config": data }
         reply = network.send_and_receive(req)
         return reply
-    except GrewError as e: 
+    except GrewError as e:
         raise GrewError({"function": "grew.set_config", "data":data, "message":e.value})
 
 class ClauseList():
@@ -45,7 +48,7 @@ class ClauseList():
          - a list of items
          - they will be concatenated
         """
-        self.sort = sort 
+        self.sort = sort
         self.items = tuple()
         for elt in L:
             if isinstance(elt,str):
@@ -55,7 +58,7 @@ class ClauseList():
 
     def json_data(self):
         return {self.sort : list(self.items)}
-    
+
     @classmethod
     def from_json(cls, json_data : JSON) :
         k = list(json_data)[0]
@@ -72,9 +75,9 @@ class Request():
     """
     def __init__(self, *L):
         """
-        L is either a list of 
+        L is either a list of
          - ClauseList or
-         - (pattern) string or a 
+         - (pattern) string or a
          - Request (for copies)
         """
         elts = tuple()
@@ -91,8 +94,8 @@ class Request():
 
     def without(self, *L):
         self.items += tuple(ClauseList("without", e) for e in L)
-        return self   
-        
+        return self
+
     @classmethod
     def from_json(cls,json_data):
         elts = [ClauseList.from_json(c) for c in json_data]
@@ -100,7 +103,7 @@ class Request():
 
     def json_data(self):
         return [x.json_data() for x in self.items]
-    
+
     def __str__(self):
         return "\n".join([str(e) for e in self.items])
 
@@ -132,13 +135,13 @@ class Rule():
 
     def __str__(self):
         return f"{str(self.request)}\n{str(self.commands)}"
-    
+
     @classmethod
     def from_json(cls,json_data):
         # print(json_data)
         reqs = Request.from_json(json_data["request"])
         cmds = Command.from_json(json_data["commands"])
-        return cls(reqs,cmds) 
+        return cls(reqs,cmds)
 
 class Package(dict):
     """
@@ -217,10 +220,10 @@ class GRS(Package):
             res = Package._from_json(json_data["decls"])
             super().__init__(res)
             self.index = index
-        elif isinstance(args, dict):        
+        elif isinstance(args, dict):
             super().__init__( args )
             self.index = 0
-        
+
     def __str__(self):
         return super().__str__()
 
@@ -249,4 +252,3 @@ class GRS(Package):
     def __setitem__(self,x,v):
         self.index = 0
         super().__setitem__(x,v)
-

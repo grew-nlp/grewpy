@@ -1,8 +1,10 @@
 import sys
 import os.path
 
-sys.path.insert(0,os.path.abspath("./grewpy")) # Use local grew lib
-import grew
+sys.path.insert(0,os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
+
+import grewpy
+from grewpy import Graph
 
 g_str = """
 {
@@ -21,7 +23,7 @@ g_str = """
 """
 
 print ("---- build a graph from a string ----")
-g1 = grew.Graph(g_str)
+g1 = Graph(g_str)
 
 print (f"|nodes| = {(len (g1))}")
 

@@ -7,7 +7,7 @@ import os.path
 import json
 import os
 
-from utils import GrewError
+from .utils import GrewError
 
 host = 'localhost'
 port = 8888
@@ -108,4 +108,3 @@ def send_request(msg):
     except GrewError as e:
         raise GrewError(
             {"function": msg["command"], "message": e.value})
-
