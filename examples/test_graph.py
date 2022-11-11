@@ -3,8 +3,7 @@ import os.path
 
 sys.path.insert(0,os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-import grewpy
-from grewpy import Graph
+from grew import Graph
 
 g_str = """
 {

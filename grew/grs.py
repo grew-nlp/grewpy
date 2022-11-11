@@ -1,43 +1,10 @@
-"""
-Grew module : anything you want to talk about graphs
-Graphs are represented either by a dict (called dict-graph),
-or by an str (str-graph).
-"""
-import os.path
-import tempfile
 import json
-import typing
-
-#from .network import send_and_receive, init
-from .graph import Graph
-from .utils import GrewError
-from .network import init as ninit
+import os.path
 
 from . import network
-
-''' Library tools '''
-
-JSON = dict[str,typing.Any] | list[typing.Any] | str | int
-
-def init(dev=False):
-    """
-    Initialize connection to GREW library
-    :return: the ouput of the subprocess.Popen command.
-    """
-    return ninit(dev)
-init()
-
-def set_config(data):
-    """
-    Change the configuration used in the next exchanges
-    See https://grew.fr/doc/graph/#edges for details about config
-    """
-    try:
-        req = { "command": "set_config", "config": data }
-        reply = network.send_and_receive(req)
-        return reply
-    except GrewError as e:
-        raise GrewError({"function": "grew.set_config", "data":data, "message":e.value})
+from . import utils
+from .grew import JSON
+from .graph import Graph
 
 class ClauseList():
     def __init__(self,sort : str,*L):

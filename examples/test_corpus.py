@@ -2,8 +2,7 @@ import sys, os, json
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-from grewpy import Corpus
-from grewpy import Request
+from grew import Corpus, Request
 
 import conllu
 

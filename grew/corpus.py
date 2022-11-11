@@ -10,7 +10,6 @@ import typing
 
 from .network import send_and_receive
 from .graph import Graph
-#from grew import GRS
 from .utils import GrewError
 from . import network
 

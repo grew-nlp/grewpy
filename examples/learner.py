@@ -1,20 +1,11 @@
 import sys, os
 
-<<<<<<< HEAD
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-import grewpy
-from grewpy import utils
-from grewpy.utils import multi_append
-from grewpy import Corpus
-from grewpy import Request, Rule, Command, GRS, Graph
-=======
-sys.path.insert(0, os.path.abspath("./grewpy"))  # Use local grew lib
 import grew
-from grew import Request, Command, Rule
-from corpus import Corpus
-from graph import Graph
->>>>>>> 163a58312c9e518b21f8d08f10a2679a48218898
+from grew import utils
+from grew import Corpus
+from grew import Request, Rule, Command, GRS, Graph
 import numpy as np
 
 #type declaration
@@ -96,11 +87,7 @@ if __name__ == "__main__":
 
     print(verify(g0s,corpus))
     print(len(R0))  
-<<<<<<< HEAD
-    Rs0 = GRS(R0 | {'main' : f'Onf(Alt({",".join([r for r in R0])}))'})
-=======
     Rs0 = grew.GRS(R0 | {'main' : f'Onf(Alt({",".join([r for r in R0])}))'})
 
->>>>>>> 163a58312c9e518b21f8d08f10a2679a48218898
     g1s = { sid : Rs0.run(g0s[sid], 'main')[0] for sid in g0s}
     print(verify(g1s,corpus))
