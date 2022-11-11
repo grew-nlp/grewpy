@@ -71,7 +71,7 @@ class Corpus():
         return iter(self.sent_ids)
 
 
-    def search(self,request):
+    def search(self,request,clustering_keys=[]):
         """
         Search for [request] into [corpus_index]
         :param request: a string request
@@ -82,9 +82,10 @@ class Corpus():
             "command": "corpus_search",
             "corpus_index": self.id,
             "request": request.json_data(),
+            "clustering_keys": clustering_keys,
             })
 
-    def count(self,request):
+    def count(self,request,clustering_keys=[]):
         """
         Count for [request] into [corpus_index]
         :param request: a string request
@@ -95,6 +96,7 @@ class Corpus():
             "command": "corpus_count",
             "corpus_index": self.id,
             "request": request.json_data(),
+            "clustering_keys": clustering_keys,
             })
 
     def map(self, app, inplace=False):

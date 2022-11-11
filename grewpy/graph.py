@@ -32,9 +32,13 @@ class Fs_edge(dict):
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
+    def __str__(self):
+        return (",".join([f"{f}={v}" for (f,v) in self.items()]))
+
     def __hash__(self):
-        A = sorted([(k,v) for (k,v) in self.items()])
-        return hash(tuple(A))
+        return (hash (str(self)))
+
+
 
 class Graph():
     """
