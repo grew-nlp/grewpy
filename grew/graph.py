@@ -12,17 +12,6 @@ from grew.network import send_and_receive
 from grew import utils
 
 ''' interfaces'''
-
-class Fs_node(dict):
-    def __init__(self,data):
-        if isinstance(data,str):
-            d = {"label": data}
-            super().__init__(d)
-        elif isinstance(data, dict):
-            super().__init__(data)
-        else:
-            raise ValueError(f"data is not a feature structure {data}")
-
 class Fs_edge(dict):
     def __init__(self,data):
         if isinstance(data,str):
@@ -37,8 +26,6 @@ class Fs_edge(dict):
 
     def __hash__(self):
         return (hash (str(self)))
-
-
 
 class Graph():
     """
@@ -67,15 +54,15 @@ class Graph():
             except json.decoder.JSONDecodeError:
                 pass # TODO load file
         elif isinstance(data, Graph):
-            self.features = copy(data.features)
-            self.sucs = copy(data.sucs)
-            self.meta = copy(data.meta)
-            self.order = copy(data.order)
+            self.features = dict(data.features)
+            self.sucs = dict(data.sucs)
+            self.meta = dict(data.meta)
+            self.order = list(data.order)
         elif isinstance(data, dict):
             self.__of_dict(data)
 
     def __of_dict(self,data_json):
-        self.features = {k: Fs_node(v) for k,v in data_json["nodes"].items()}
+        self.features = data_json["nodes"]
         for edge in data_json.get("edges", []):
             utils.map_append (self.sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
         self.meta = data_json.get("meta", dict())

@@ -63,7 +63,7 @@ class Corpus():
             if isinstance(data, str):
                 return self.items[data]
             if isinstance(data, int):
-                return self.items[self.sent_ids[i]]
+                return self.items[self.sent_ids[data]]
         else:
             req = {"command": "corpus_get", "corpus_index": self.id}
             if isinstance(data, slice):

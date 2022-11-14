@@ -21,29 +21,13 @@ def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     search for P within c
     n1 and n2 are nodes within P
     """
-    obs = dict()
     P1 = Request(P, f'e:{n1} -> {n2}')
-    clustered = c.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
-    # turn dict[str,dict[str,Count]] into Observation
-    for (upos1, sub_clustered) in clustered.items():
-        for (upos2, edge_count) in sub_clustered.items():
-            obs[(upos1, upos2)] = edge_count
-    
-    """
-    W = Request(f"{n1}[]", f"{n2}[]", P).without("X -> Y")
-    clustered = c.count(W, [f"{n1}.upos", f"{n2}.upos"])
-    for (upos1,sub_clustered) in clustered.items():
-        for upos2,v in sub_clustered.items():
-            if (upos1,upos2) not in obs:
-                obs[(upos1,upos2)] = dict()
-            obs[(upos1,upos2)][''] = v
-            W = Request(P, f"Y[upos={upos1}];X[upos={upos2}]").without("X -> Y")
-            print(f"{c.count(W)}, {obs[(upos1,upos2)]['']}")
-    """
-    
-    for u1,u2 in obs: #take into account there is no edge between X and Y
-        W = Request(P,f"Y[upos={u2}];X[upos={u1}]").without("X -> Y")
-        obs[(u1, u2)][""] = c.count(W)
+    obs = c.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
+    W1 = Request(f"Y[];X[]",P).without("X -> Y")
+    clus = c.count(W1, [f"{n1}.upos", f"{n2}.upos"])
+    for u1 in obs:
+        for u2 in obs[u1]:
+            obs[u1][u2][''] = clus.get(u1,dict()).get(u2,0)
     return obs
 
 def anomaly(obs : Count):
@@ -61,17 +45,19 @@ def rank0(c : Corpus) -> dict[str,Rule]:
     request_r_l = Request("Y<X")
     obsrl = cluster(c, request_r_l, "X", "Y")
     rules = dict()
-    for (p1,p2),es in obslr.items():
-        if x := anomaly(es): #the feature edge x has majority
-            #build the rule            
-            P = Request(f"X[upos={p1}]; Y[upos={p2}]; X < Y").without( f"X-[{x}]->Y")
-            R = Rule(P,Command(f"add_edge X-[{x}]->Y"))
-            rules[f"_{p1}_lr_{p2}_"] = R
-    for (p1, p2), es in obsrl.items():
-        if x := anomaly(es):
-            P = Request(f"X[upos={p1}]; Y[upos={p2}]; Y < X").without(f"X-[{x}]->Y")
-            R = Rule(P,Command(f"add_edge X-[{x}]->Y"))
-            rules[f"_{p1}_rl_{p2}_"] = R
+    for p1, v in obslr.items():
+        for p2, es in v.items():
+            if x := anomaly(es): #the feature edge x has majority
+                #build the rule            
+                P = Request(f"X[upos={p1}]; Y[upos={p2}]; X < Y").without( f"X-[{x}]->Y")
+                R = Rule(P,Command(f"add_edge X-[{x}]->Y"))
+                rules[f"_{p1}_lr_{p2}_"] = R
+    for p1, v in obsrl.items():
+        for p2, es in v.items():
+            if x := anomaly(es):
+                P = Request(f"X[upos={p1}]; Y[upos={p2}]; Y < X").without(f"X-[{x}]->Y")
+                R = Rule(P,Command(f"add_edge X-[{x}]->Y"))
+                rules[f"_{p1}_rl_{p2}_"] = R
     return rules
 
 def edge_verification(g: Graph, h : Graph) -> tuple[int,int,int] : 
@@ -98,7 +84,7 @@ if __name__ == "__main__":
     print_request_counter()
     R0 = rank0(corpus)
     print_request_counter()
-    g0s = {sid: corpus[sid] for sid in corpus}  # a copy of the graphs
+    g0s = {sid: Graph(corpus[sid]) for sid in corpus}  # a copy of the graphs
     for sid,g in g0s.items():
         clear_edges(g)
     #cstart = Corpus(g0s)
@@ -109,6 +95,7 @@ if __name__ == "__main__":
     print(len(R0))
     print_request_counter()
     Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
+    print(len(Rs0))
 
     g1s = { sid : Rs0.run(g0s[sid], 'main')[0] for sid in g0s}
     print_request_counter()
