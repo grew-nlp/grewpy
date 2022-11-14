@@ -205,7 +205,7 @@ class GRS(Package):
         self._build() # first ensure that the GRS is loaded in Ocaml
         req = {
             "command": "run",
-            "graph": G.json(),
+            "graph": json.dumps(G.json_data()),
             "grs_index": self.index,
             "strat": strat
         }

@@ -1,5 +1,6 @@
 import sys
 import os.path
+import json
 
 sys.path.insert(0,os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
@@ -34,4 +35,4 @@ print (g1.suc("B"))
 
 
 print ("---- JSON output of a graph ----")
-print (g1.json())
+print (json.dumps(g1.json_data(), indent=4))

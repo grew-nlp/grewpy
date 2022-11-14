@@ -40,12 +40,11 @@ class Graph():
         an oterh graph => copy the dict
         :return: a graph
         """
-        self.features = dict()
-        self.sucs = dict() # ??? initaliser à []
-        self.meta = dict ()
-        self.order = []
         if data is None:
-            pass # ??? on garde le graphe vide
+            self.features = dict()
+            self.sucs = dict()  # ??? initaliser à []
+            self.meta = dict()
+            self.order = []
         elif isinstance(data,str):
             #either json or filename
             try:
@@ -63,6 +62,7 @@ class Graph():
 
     def __of_dict(self,data_json):
         self.features = data_json["nodes"]
+        self.sucs = dict()
         for edge in data_json.get("edges", []):
             utils.map_append (self.sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
         self.meta = data_json.get("meta", dict())
@@ -94,15 +94,13 @@ class Graph():
         s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.sucs.items() for e,m in suc])
         return s + '\n}'
 
-    def json(self):
+    def json_data(self):
         nds = {c:self[c] for c in self.features}
         edg_list = []
         for n in self.sucs:
             for (e,s) in self.sucs[n]:
                 edg_list.append({"src":f"{n}", "label":s,"tar":f"{e}"})
-        json_data ={"nodes" : nds, "edges" : edg_list, "order": self.order }
-        js = json.dumps(json_data, indent=4)
-        return js
+        return {"nodes" : nds, "edges" : edg_list, "order": self.order }
 
     def __str__(self):
         return f"({str(self.features())}, {str(self.sucs)})" # TODO order, meta
@@ -116,5 +114,5 @@ class Graph():
         reply = send_and_receive(req)
         return reply
 
-    def edges_as_triple(self):
+    def triples(self):
         return set((n, e, s) for n,v in self.sucs.items() for e,s in v)

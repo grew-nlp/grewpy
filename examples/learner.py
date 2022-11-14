@@ -23,7 +23,7 @@ def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     P1 = Request(P, f'e:{n1} -> {n2}')
     obs = c.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
-    W1 = Request(f"{n1}[];{n2}[]",P).without("X -> Y")
+    W1 = Request(f"{n1}[];{n2}[]",P).without(f"{n1} -> {n2}")
     clus = c.count(W1, [f"{n1}.upos", f"{n2}.upos"])
     for u1 in obs:
         for u2 in obs[u1]:
@@ -60,8 +60,8 @@ def rank0(c : Corpus) -> dict[str,Rule]:
     return rules
 
 def edge_verification(g: Graph, h : Graph) -> np.array : 
-    E1 = g.edges_as_triple()
-    E2 = h.edges_as_triple()
+    E1 = g.triples() #set of edges as triples
+    E2 = h.triples()
     return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
 def verify(corpus1, corpus2):
