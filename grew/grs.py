@@ -160,7 +160,7 @@ class GRS(Package):
             req = {"command": "load_grs", "filename": data}
         else:
             req = {"command": "load_grs", "str": data}
-        reply = network.send_request(req)
+        reply = network.send_and_receive(req)
         index = reply["index"]
         return index
 
@@ -169,7 +169,7 @@ class GRS(Package):
         if not self.index:
             data = self.json_data()
             req = {"command": "load_grs", "json": data}
-            reply = network.send_request(req)
+            reply = network.send_and_receive(req)
             index = reply["index"]
             self.index = index
 
@@ -183,7 +183,7 @@ class GRS(Package):
         if isinstance(args,str):
             index = GRS._load(args)
             req = {"command": "json_grs", "grs_index": index}
-            json_data = network.send_request(req)
+            json_data = network.send_and_receive(req)
             res = Package._from_json(json_data["decls"])
             super().__init__(res)
             self.index = index
@@ -212,7 +212,7 @@ class GRS(Package):
         # print("---------------------")
         # print(req)
         # print("-------------------------")
-        reply = network.send_request(req)
+        reply = network.send_and_receive(req)
         return [Graph(s) for s in reply]
 
 

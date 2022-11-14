@@ -24,22 +24,22 @@ class Corpus():
         """
         if isinstance(data, list):
             req = { "command": "load_corpus", "files": data }
-            reply = network.send_request(req)
+            reply = network.send_and_receive(req)
         elif os.path.isfile(data):
             req = { "command": "load_corpus", "files": [data] }
-            reply = network.send_request(req)
+            reply = network.send_and_receive(req)
         else:
             with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
                 f.write(data)
                 f.flush()  # to be read by others
                 req = { "command": "load_corpus", "files": [f.name] }
                 try:
-                    reply = network.send_request(req)
+                    reply = network.send_and_receive(req)
                 except GrewError:
                     raise GrewError(data)
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
-        self.sent_ids = network.send_request(req)
+        self.sent_ids = network.send_and_receive(req)
         if local:
             self.local = True
             self.items = {sid: Graph(network.send_and_receive(
@@ -92,7 +92,7 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the list of matching of [request] into the corpus
         """
-        return network.send_request({
+        return network.send_and_receive({
             "command": "corpus_search",
             "corpus_index": self.id,
             "request": request.json_data(),
@@ -106,7 +106,7 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [request] into the corpus
         """
-        return network.send_request({
+        return network.send_and_receive({
             "command": "corpus_count",
             "corpus_index": self.id,
             "request": request.json_data(),

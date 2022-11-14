@@ -93,22 +93,9 @@ def send_and_receive(msg):
             except:
                 return None
         elif reply["status"] == "ERROR":
-            raise GrewError (reply["message"])
+            raise GrewError({"function": msg["command"], "message": "ERROR"})
     except socket.error:
-        raise GrewError('Library call socket error')
-    except AttributeError: # connect issue
-        raise GrewError('Library call AttributeError')
+        raise GrewError({"function": msg["command"], "message" : 'Socket error'})
+    except AttributeError as e: # connect issue
+        raise GrewError({"function": msg["command"], "message" : e.value})
 
-
-def send_request(msg):
-    """
-    As send and receive, with Grew exception
-    in case of error: a grew message is sent,
-    otherwise return normal answer
-    msg is a dict containing the request
-    """
-    try:
-        return send_and_receive(msg)
-    except GrewError as e:
-        raise GrewError(
-            {"function": msg["command"], "message": e.value})

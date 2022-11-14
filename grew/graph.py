@@ -113,5 +113,8 @@ class Graph():
         """
         data = self.json()
         req = {"command": "conll_graph", "graph": data}
-        reply = network.send_request(req)
+        reply = send_and_receive(req)
         return reply
+
+    def edges_as_triple(self):
+        return set((n, e, s) for n,v in self.sucs.items() for e,s in v)
