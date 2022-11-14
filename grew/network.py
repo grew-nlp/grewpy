@@ -14,6 +14,8 @@ port = 8888
 remote_ip = ''
 caml_pid = None
 
+request_counter = 0 #number of request to caml
+
 import signal
 def preexec_function ():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -61,7 +63,9 @@ def connect():
 packet_size=32768
 
 def send_and_receive(msg):
+    global request_counter
     try:
+        request_counter += 1
         stocaml = connect()
         json_msg = json.dumps(msg).encode(encoding='UTF-8')
         len_string = "%010d" % len(json_msg)

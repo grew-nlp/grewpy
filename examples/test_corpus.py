@@ -4,12 +4,8 @@ sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../
 
 from grew import Corpus, Request
 
-import conllu
-
 pud_file = "examples/resources/fr_pud-ud-test.conllu"
 pud = Corpus(pud_file)
-
-#print (f"pud.id = {pud.id}")
 
 print ("\n=============== len ===============")
 print(f"nb of graph in {pud_file} = {len(pud)}")
@@ -38,7 +34,6 @@ print(f"nb of {upos} in {pud_file}, clustered by lemma:")
 print (json.dumps(pud.count(req, ["X.lemma"]), indent=2))
 
 
-
 print ("\n=============== Search request in a corpus ===============")
 
 print(" ----- basic search -----")
@@ -48,6 +43,5 @@ print (json.dumps (pud.search(req), indent=2))
 print (" ----- search with clustering -----")
 print(f"occurrences of {upos} in {pud_file}, clustered by lemma:")
 print (json.dumps (pud.search(req, ["X.lemma"]), indent=2))
-
 
 exit (0)

@@ -3,7 +3,6 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
 import grew
-from grew import utils
 from grew import Corpus
 from grew import Request, Rule, Command, GRS, Graph
 import numpy as np
@@ -13,6 +12,9 @@ Count = dict[str,int]
 Observation = dict[tuple[str,str],Count]
 #Observation is a dict mapping('VERB', 'NOUN') to {'' : 10, 'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 #'' meaning no relationships
+
+def print_request_counter():
+    print(f"Req: {grew.network.request_counter}")
 
 def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
@@ -26,6 +28,19 @@ def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     for (upos1, sub_clustered) in clustered.items():
         for (upos2, edge_count) in sub_clustered.items():
             obs[(upos1, upos2)] = edge_count
+    
+    """
+    W = Request(f"{n1}[]", f"{n2}[]", P).without("X -> Y")
+    clustered = c.count(W, [f"{n1}.upos", f"{n2}.upos"])
+    for (upos1,sub_clustered) in clustered.items():
+        for upos2,v in sub_clustered.items():
+            if (upos1,upos2) not in obs:
+                obs[(upos1,upos2)] = dict()
+            obs[(upos1,upos2)][''] = v
+            W = Request(P, f"Y[upos={upos1}];X[upos={upos2}]").without("X -> Y")
+            print(f"{c.count(W)}, {obs[(upos1,upos2)]['']}")
+    """
+    
     for u1,u2 in obs: #take into account there is no edge between X and Y
         W = Request(P,f"Y[upos={u2}];X[upos={u1}]").without("X -> Y")
         obs[(u1, u2)][""] = c.count(W)
@@ -78,16 +93,24 @@ def clear_edges(g):
         g.sucs[n] = []
 
 if __name__ == "__main__":
+    print_request_counter()
     corpus = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    print_request_counter()
     R0 = rank0(corpus)
-    g0s = {sid : corpus[sid] for sid in corpus} #a copy of the graphs
+    print_request_counter()
+    g0s = {sid: corpus[sid] for sid in corpus}  # a copy of the graphs
     for sid,g in g0s.items():
         clear_edges(g)
     #cstart = Corpus(g0s)
 
-    print(verify(g0s,corpus))
-    print(len(R0))  
-    Rs0 = grew.GRS(R0 | {'main' : f'Onf(Alt({",".join([r for r in R0])}))'})
+    print_request_counter()
+    print(verify(g0s, corpus))
+    print_request_counter()
+    print(len(R0))
+    print_request_counter()
+    Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
 
     g1s = { sid : Rs0.run(g0s[sid], 'main')[0] for sid in g0s}
-    print(verify(g1s,corpus))
+    print_request_counter()
+    print(verify(g1s, corpus))
+    print_request_counter()

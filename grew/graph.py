@@ -7,9 +7,9 @@ import copy
 import tempfile
 import json
 
-from .utils import GrewError
-from .network import send_and_receive
-from . import utils
+from grew.utils import GrewError
+from grew.network import send_and_receive
+from grew import utils
 
 ''' interfaces'''
 

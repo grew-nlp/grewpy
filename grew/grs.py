@@ -4,7 +4,7 @@ import os.path
 from . import network
 from . import utils
 from .grew import JSON
-from .graph import Graph
+from grew.graph import Graph
 
 class ClauseList():
     def __init__(self,sort : str,*L):

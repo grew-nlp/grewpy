@@ -15,9 +15,10 @@ from . import network
 
 
 class Corpus():
-    def __init__(self,data):
+    def __init__(self,data, local=True):
         """Load a corpus from a file of a string
         :param data: a file, a list of files or a CoNLL string representation of a corpus
+        :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
@@ -39,6 +40,12 @@ class Corpus():
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
         self.sent_ids = network.send_request(req)
+        if local:
+            self.local = True
+            self.items = {sid: Graph(network.send_and_receive(
+                {"command": "corpus_get", "corpus_index": self.id, "sent_id": sid})) for sid in self.sent_ids}
+        else:
+            self.local = False
 
     def __len__(self):
         return len(self.sent_ids)
@@ -50,21 +57,29 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: a graph
         """
-        req = {"command": "corpus_get", "corpus_index": self.id}
-        if isinstance(data, slice):
-            start = data.start if data.start else 0
-            stop = data.stop if data.stop else len(self)
-            step = data.step if data.step else 1
-            res = []
-            for i in range(start,stop, step):
-                req["position"] = i
-                res.append(Graph(network.send_and_receive(req)))
-            return res
-        if isinstance(data, int):
-            req["position"]  = data % len(self)
-        elif isinstance(data, str):
-            req["sent_id"] =  data
-        return Graph(network.send_and_receive(req))
+        if self.local:
+            if isinstance(data, slice):
+                return [self.items[self.sent_ids[i]] for i in data]
+            if isinstance(data, str):
+                return self.items[data]
+            if isinstance(data, int):
+                return self.items[self.sent_ids[i]]
+        else:
+            req = {"command": "corpus_get", "corpus_index": self.id}
+            if isinstance(data, slice):
+                start = data.start if data.start else 0
+                stop = data.stop if data.stop else len(self)
+                step = data.step if data.step else 1
+                res = []
+                for i in range(start,stop, step):
+                    req["position"] = i
+                    res.append(Graph(network.send_and_receive(req)))
+                return res
+            if isinstance(data, int):
+                req["position"]  = data % len(self)
+            elif isinstance(data, str):
+                req["sent_id"] =  data
+            return Graph(network.send_and_receive(req))
 
     def __iter__(self):
         return iter(self.sent_ids)
