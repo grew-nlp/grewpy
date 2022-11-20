@@ -25,6 +25,9 @@ class Corpus():
         if isinstance(data, list):
             req = { "command": "load_corpus", "files": data }
             reply = network.send_and_receive(req)
+        elif isinstance(data, dict):
+            req = { "command": "corpus_from_dict", "graphs": data }
+            reply = network.send_and_receive(req)
         elif os.path.isfile(data):
             req = { "command": "load_corpus", "files": [data] }
             reply = network.send_and_receive(req)
@@ -40,15 +43,30 @@ class Corpus():
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
         self.sent_ids = network.send_and_receive(req)
+        self.unsynchronized_sent_ids = set()
         if local:
-            self.local = True
-            self.items = {sid: Graph(network.send_and_receive(
-                {"command": "corpus_get", "corpus_index": self.id, "sent_id": sid})) for sid in self.sent_ids}
+            dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self.id })
+            self.items = {sid: Graph(json_data) for (sid,json_data) in dico.items() }
         else:
-            self.local = False
+            self.items = dict() 
+    # TODO: if data is a dict, requests corpus_get_all can be skipped
 
     def __len__(self):
         return len(self.sent_ids)
+
+    def __setitem__(self,x,v):
+        self.unsynchronized_sent_ids.add (x)
+        self.items[x]=v
+
+    def _get_one_item(self,sent_id):
+        if sent_id in self.items:
+            return self.items[sent_id]
+        else:
+            req = {"command": "corpus_get", "corpus_index": self.id, "sent_id": sent_id}
+            graph = Graph(network.send_and_receive(req))
+            self.items[sent_id] = graph
+            self.unsynchronized_sent_ids.discard(sent_id)
+            return graph
 
     def __getitem__(self, data):
         """
@@ -57,33 +75,24 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: a graph
         """
-        if self.local:
-            if isinstance(data, slice):
-                return [self.items[self.sent_ids[i]] for i in data]
-            if isinstance(data, str):
-                return self.items[data]
-            if isinstance(data, int):
-                return self.items[self.sent_ids[data]]
-        else:
-            req = {"command": "corpus_get", "corpus_index": self.id}
-            if isinstance(data, slice):
-                start = data.start if data.start else 0
-                stop = data.stop if data.stop else len(self)
-                step = data.step if data.step else 1
-                res = []
-                for i in range(start,stop, step):
-                    req["position"] = i
-                    res.append(Graph(network.send_and_receive(req)))
-                return res
-            if isinstance(data, int):
-                req["position"]  = data % len(self)
-            elif isinstance(data, str):
-                req["sent_id"] =  data
-            return Graph(network.send_and_receive(req))
+        if isinstance(data, str):
+            return self._get_one_item(data)
+        if isinstance(data, int):
+            return self._get_one_item(self.sent_ids[data])
+        if isinstance(data, slice):
+            return [self._get_one_item(self.sent_ids[i]) for i in data]
+
+    def _synchronize(self):
+        req = {
+            "command": "corpus_update",
+            "corpus_index": self.id,
+            "graphs": { sent_id : self.items[sent_id].json_data() for sent_id in self.unsynchronized_sent_ids }
+            }
+        send_and_receive(req)
+        self.unsynchronized_sent_ids = set()
 
     def __iter__(self):
         return iter(self.sent_ids)
-
 
     def search(self,request,clustering_keys=[]):
         """
@@ -92,6 +101,7 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the list of matching of [request] into the corpus
         """
+        self._synchronize()
         return network.send_and_receive({
             "command": "corpus_search",
             "corpus_index": self.id,
@@ -106,6 +116,7 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [request] into the corpus
         """
+        self._synchronize()
         return network.send_and_receive({
             "command": "corpus_count",
             "corpus_index": self.id,
