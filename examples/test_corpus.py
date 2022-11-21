@@ -64,9 +64,13 @@ print(f"nb of fixed in {pud_file}, clustered by head.lemma:")
 print (json.dumps(pud.count(req, ["X.lemma"]), indent=2))
 
 g = pud[sent_id]
+for n in g:
+  for (s,e) in g.suc(n):
+    if e  == {'1' : 'fixed'}:
+      print(f"\n{n} : {g[n]} -[{e}]-> {s} : {g[s]}\n")
+
 clear_edges(g)
 pud[sent_id] = g
-
 # NOTE: the next line does not work properly (not __set_item__ called), have a look to https://stackoverflow.com/questions/26189090/how-to-detect-if-any-element-in-a-dictionary-changes
 # clear_edges(pud[sent_id])
 
