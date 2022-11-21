@@ -4,6 +4,7 @@ Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
 import os.path
+import sys
 import tempfile
 import json
 import typing
@@ -59,7 +60,9 @@ class Corpus():
         """
         if self.local:
             if isinstance(data, slice):
-                return [self.items[self.sent_ids[i]] for i in data]
+                start, stop, step = data.start or 0, data.stop or sys.maxsize, data.step or 1
+                names = [n for n in self.sent_ids[start:stop:step]]
+                return [self.items[n] for n in names]
             if isinstance(data, str):
                 return self.items[data]
             if isinstance(data, int):

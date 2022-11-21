@@ -44,7 +44,7 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name):
     obslr = cluster(corpus, requirement, n1, n2)
     for p1, v in obslr.items():
         for p2, es in v.items():
-            if x := anomaly(es, 0.95): #the feature edge x has majority
+            if x := anomaly(es, 0.66): #the feature edge x has majority
                 #build the rule            
                 P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement).without( f"{n1}-[{x}]->{n2}")
                 R = Rule(P,Command(f"add_edge {n1}-[{x}]->{n2}"))

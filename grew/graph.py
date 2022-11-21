@@ -103,7 +103,7 @@ class Graph():
         return {"nodes" : nds, "edges" : edg_list, "order": self.order }
 
     def __str__(self):
-        return f"({str(self.features())}, {str(self.sucs)})" # TODO order, meta
+        return f"({str(self.features)}, {str(self.sucs)})" # TODO order, meta
 
     def to_conll(self):
         """
@@ -115,4 +115,4 @@ class Graph():
         return reply
 
     def triples(self):
-        return set((n, e, s) for n,v in self.sucs.items() for e,s in v)
+        return set((n, e, s) for n in self.sucs for e,s in self.sucs[n])
