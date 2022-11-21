@@ -99,6 +99,8 @@ class Graph():
         edg_list = []
         for n in self.sucs:
             for (e,s) in self.sucs[n]:
+                if len(s.keys()) == 1 and '1' in s.keys():
+                    s = s["1"]
                 edg_list.append({"src":f"{n}", "label":s,"tar":f"{e}"})
         return {"nodes" : nds, "edges" : edg_list, "order": self.order }
 
