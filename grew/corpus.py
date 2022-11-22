@@ -27,7 +27,7 @@ class Corpus():
             req = { "command": "load_corpus", "files": data }
             reply = network.send_and_receive(req)
         elif isinstance(data, dict):
-            req = { "command": "corpus_from_dict", "graphs": data }
+            req = { "command": "corpus_from_dict", "graphs": { sent_id: graph.json_data() for (sent_id,graph) in data.items() } }
             reply = network.send_and_receive(req)
         elif os.path.isfile(data):
             req = { "command": "load_corpus", "files": [data] }
@@ -99,14 +99,13 @@ class Corpus():
         :return: the list of matching of [request] into the corpus
         """
         if self._local:
-            ...
-        else:
-            return network.send_and_receive({
-                "command": "corpus_search",
-                "corpus_index": self.id,
-                "request": request.json_data(),
-                "clustering_keys": clustering_keys,
-            })
+            self._synchronize()
+        return network.send_and_receive({
+            "command": "corpus_search",
+            "corpus_index": self.id,
+            "request": request.json_data(),
+            "clustering_keys": clustering_keys,
+        })
 
     def count(self,request,clustering_keys=[]):
         """
