@@ -21,6 +21,12 @@ graph = pud[sent_id]
 print(f"nb of nodes of {sent_id} = ", len(graph))
 print_request_counter()
 
+print(f"len(pud[0]) = {len(pud[0])}")
+print(f"len(pud[-1]) = {len(pud[-1])}")
+print(f"[len(g) for g in pud[-3:]] = {[len(g) for g in pud[-3:]]}")
+#other forms pud[-3:-1], pud[1:7:2], ...
+
+
 print ("\n=============== Iteration on graphs of a corpus ===============")
 print ("⚠️  generate one request to Grew backend for each graph")
 acc = 0
