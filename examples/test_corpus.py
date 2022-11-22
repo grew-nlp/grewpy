@@ -72,7 +72,7 @@ for n in g:
 clear_edges(g)
 pud[sent_id] = g
 # NOTE: the next line does not work properly (not __set_item__ called), have a look to https://stackoverflow.com/questions/26189090/how-to-detect-if-any-element-in-a-dictionary-changes
-# clear_edges(pud[sent_id])
+# clear_edges(pud[sent_id]) ==> WARNING: does not change pud!
 
 print (" ----- count with clustering -----")
 print(f"nb of {upos} in {pud_file}, clustered by lemma:")

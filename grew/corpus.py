@@ -44,30 +44,32 @@ class Corpus():
         self.id =reply["index"]
         req = {"command": "corpus_sent_ids", "corpus_index": self.id}
         self.sent_ids = network.send_and_receive(req)
-        self.unsynchronized_sent_ids = set()
         if local:
-            dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self.id })
-            self.items = {sid: Graph(json_data) for (sid,json_data) in dico.items() }
+            self._local = True
+            if isinstance (data, dict):
+                self.items = data
+            else:
+                dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self.id })
+                self.items = {sid: Graph(json_data) for (sid,json_data) in dico.items() }
         else:
-            self.items = dict() 
-    # TODO: if data is a dict, requests corpus_get_all can be skipped
+            self._local = False
+        # TODO: if data is a dict, requests corpus_get_all can be skipped
 
     def __len__(self):
         return len(self.sent_ids)
 
     def __setitem__(self,x,v):
-        self.unsynchronized_sent_ids.add (x)
-        self.items[x]=v
+        if self._local:
+            self.items[x] = v
+        else:
+            self.update({x:v})
 
     def _get_one_item(self,sent_id):
-        if sent_id in self.items:
+        if self._local:
             return self.items[sent_id]
         else:
             req = {"command": "corpus_get", "corpus_index": self.id, "sent_id": sent_id}
-            graph = Graph(network.send_and_receive(req))
-            self.items[sent_id] = graph
-            self.unsynchronized_sent_ids.discard(sent_id)
-            return graph
+            return (Graph(network.send_and_receive(req)))
 
     def __getitem__(self, data):
         """
@@ -81,16 +83,10 @@ class Corpus():
         if isinstance(data, int):
             return self._get_one_item(self.sent_ids[data])
         if isinstance(data, slice):
-            return [self._get_one_item(self.sent_ids[i]) for i in data]
+            return [self._get_one_item(self.sent_ids[i]) for i in range(data)]
 
     def _synchronize(self):
-        req = {
-            "command": "corpus_update",
-            "corpus_index": self.id,
-            "graphs": { sent_id : self.items[sent_id].json_data() for sent_id in self.unsynchronized_sent_ids }
-            }
-        send_and_receive(req)
-        self.unsynchronized_sent_ids = set()
+        self.update(self.items)
 
     def __iter__(self):
         return iter(self.sent_ids)
@@ -102,12 +98,14 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the list of matching of [request] into the corpus
         """
-        self._synchronize()
-        return network.send_and_receive({
-            "command": "corpus_search",
-            "corpus_index": self.id,
-            "request": request.json_data(),
-            "clustering_keys": clustering_keys,
+        if self._local:
+            ...
+        else:
+            return network.send_and_receive({
+                "command": "corpus_search",
+                "corpus_index": self.id,
+                "request": request.json_data(),
+                "clustering_keys": clustering_keys,
             })
 
     def count(self,request,clustering_keys=[]):
@@ -117,20 +115,27 @@ class Corpus():
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [request] into the corpus
         """
-        self._synchronize()
-        return network.send_and_receive({
-            "command": "corpus_count",
-            "corpus_index": self.id,
-            "request": request.json_data(),
-            "clustering_keys": clustering_keys,
+        if self._local:
+            ...
+        else:
+            return network.send_and_receive({
+                "command": "corpus_count",
+                "corpus_index": self.id,
+                "request": request.json_data(),
+                "clustering_keys": clustering_keys,
             })
 
     def map(self, app, inplace=False):
         x = {sid : map(self[sid]) for sid in self}
         #load(x)
 
-    def update(self, dict):
-        pass
+    def update(self, dico):
+        req = {
+            "command": "corpus_update",
+            "corpus_index": self.id,
+            "graphs": { sent_id : dico[sent_id].json_data() for sent_id in dico }
+            }
+        send_and_receive(req)
 
     def delete(self, key_list):
         ...
