@@ -83,7 +83,7 @@ class Corpus():
         if isinstance(data, int):
             return self._get_one_item(self.sent_ids[data])
         if isinstance(data, slice):
-            return [self._get_one_item(self.sent_ids[i]) for i in range(data)]
+            return [self._get_one_item(sid) for sid in self.sent_ids[data]]
 
     def _synchronize(self):
         self.update(self.items)
