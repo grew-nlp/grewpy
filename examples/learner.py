@@ -83,16 +83,19 @@ if __name__ == "__main__":
     g0s = {sid: Graph(corpus[sid]) for sid in corpus}  # a copy of the graphs
     for sid,g in g0s.items():
         clear_edges(g)
-    #cstart = Corpus(g0s)
+    cstart = Corpus(g0s)
 
     print_request_counter()
-    print(verify(g0s, corpus))
+    print(verify(cstart, corpus))
     print_request_counter()
     print(len(R0))
     print_request_counter()
     Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
     
-    g1s = { sid : Rs0.run(g0s[sid], 'main')[0] for sid in g0s}
+    corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
+    A = corpus.count(Request("X[];Y[];X<Y;X->Y"),[])
+    A += corpus.count(Request("X[];Y[];Y<X;X->Y"), [])
+    print(A)
     print_request_counter()
-    print(verify(g1s, corpus))
+    print(verify(corpus1, corpus))
     print_request_counter()
