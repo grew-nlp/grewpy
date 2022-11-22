@@ -116,9 +116,8 @@ class Corpus():
         :return: the number of matching of [request] into the corpus
         """
         if self._local:
-            ...
-        else:
-            return network.send_and_receive({
+            self._synchronize()
+        return network.send_and_receive({
                 "command": "corpus_count",
                 "corpus_index": self.id,
                 "request": request.json_data(),
