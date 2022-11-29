@@ -46,7 +46,7 @@ class Corpus(dict):
 
 
 class AbstractCorpus:
-    def __init__(self, data, local=True):
+    def __init__(self, data):
         """Load a corpus on the CAML server
         :param data: a file, a list of files or a CoNLL string representation of a corpus
         :param local: state whether we load a local copy of each graph of the corpus
@@ -79,6 +79,8 @@ class AbstractCorpus:
         req = {"command": "corpus_sent_ids", "corpus_index": self._id}
         return network.send_and_receive(req)
 
+    def get_id(self):
+        return self._id
 
     def get(self, sent_id):
         req = {"command": "corpus_get",

@@ -5,6 +5,7 @@ from . import network
 from . import utils
 from .grew import JSON
 from grew.graph import Graph
+from .corpus import AbstractCorpus, Corpus
 
 class ClauseList():
     def __init__(self,sort : str,*L):
@@ -224,28 +225,50 @@ class AbstractGRS:
         if isinstance(data, Graph):
             req = {
                 "command": "grs_run_graph",
-                "graph": json.dumps(G.json_data()),
+                "graph": json.dumps(data.json_data()),
                 "grs_index": self.id,
                 "strat": strat
             }
             reply = network.send_and_receive(req)
             return [Graph(s) for s in reply]
-        else :
-            return 0
+        elif isinstance(data, AbstractCorpus):
+            req = {
+                "command": "grs_run_corpus",
+                "corpus": data.get_id(),
+                "grs_index": self.id,
+                "strat": strat
+            }
+            reply = network.send_and_receive(req)
+            return {sid: [Graph(s) for s in L] for sid, L in reply.items() } 
+        elif isinstance(data, Corpus):
+            return {sid: self.run(g) for sid,g in data.items() } 
 
-    def apply(self, G, strat="main"):
+    def apply(self, data, strat="main", abstract=True):
         """
-        run a Grs on a graph
+        run a Grs on a graph or corpus
         :param grs_data: a graph rewriting system or a Grew string representation of a grs
         :param G: the graph, either a str (in grew format) or a dict
         :param strat: the strategy (by default "main")
         :return: the rewritten graph and an error if there is not exaclty one output graph
         """
-        req = {
-            "command": "grs_apply_graph",
-            "graph": json.dumps(G.json_data()),
-            "grs_index": self.id,
-            "strat": strat
-        }
-        reply = network.send_and_receive(req)
-        return Graph(reply)
+        if isinstance(data, Graph):
+            req = {
+                "command": "grs_apply_graph",
+                "graph": json.dumps(data.json_data()),
+                "grs_index": self.id,
+                "strat": strat
+            }
+            reply = network.send_and_receive(req)
+            return Graph(reply)
+        elif isinstance(data, AbstractCorpus):
+            req = {
+                "command": "grs_apply_corpus",
+                "corpus": data.get_id(),
+                "grs_index": self.id,
+                "strat": strat
+            } # return None because inplace
+            network.send_and_receive(req)
+            return data if abstract else Corpus (data)
+        elif isinstance(data, Corpus):
+            acorpus = AbstractCorpus(data)
+            self.apply(acorpus, strat, abstract)
