@@ -136,3 +136,6 @@ class AbstractCorpus:
             "command": "corpus_length",
             "corpus_index": self._id,
         })
+
+    def __iter__(self):
+        return iter(self.get_sent_ids())

@@ -154,25 +154,6 @@ class Package(dict):
 
 class GRS(Package):
 
-    def _load(data):
-        """load data (either a filename or a json encoded string) within grew"""
-        if os.path.isfile(data):
-            req = {"command": "load_grs", "filename": data}
-        else:
-            req = {"command": "load_grs", "str": data}
-        reply = network.send_and_receive(req)
-        index = reply["index"]
-        return index
-
-    def _build(self):
-        """ ensure that the GRS is loaded (and call Ocaml if needed)"""
-        if not self.index:
-            data = self.json_data()
-            req = {"command": "load_grs", "json": data}
-            reply = network.send_and_receive(req)
-            index = reply["index"]
-            self.index = index
-
     def __init__(self,args):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
@@ -181,18 +162,44 @@ class GRS(Package):
         :raise an error if the file was not correctly loaded
         """
         if isinstance(args,str):
-            index = GRS._load(args)
-            req = {"command": "json_grs", "grs_index": index}
-            json_data = network.send_and_receive(req)
+            agrs = AbstractGRS(args)
+            json_data = agrs.json()
             res = Package._from_json(json_data["decls"])
             super().__init__(res)
-            self.index = index
         elif isinstance(args, dict):
             super().__init__( args )
-            self.index = 0
 
     def __str__(self):
         return super().__str__()
+
+class AbstractGRS:
+
+    def __init__(self, args):
+        """Load a grs stored in a file
+        :param data: either a file name or a Grew string representation of a grs
+        :or kwargs contains explicitly the parts of the grs
+        :return: an integer index for latter reference to the grs
+        :raise an error if the file was not correctly loaded
+        """
+        if isinstance(args, str):
+            if os.path.isfile(args):
+                req = {"command": "load_grs", "filename": args}
+            else:
+                req = {"command": "load_grs", "str": args}
+        elif isinstance(args, GRS):
+            req = {"command": "load_grs", "json": args.json_data()}
+        else:
+            raise ValueError(f"cannot build a grs with {args}")
+    
+        reply = network.send_and_receive(req)
+        self.id = reply["index"]    
+
+    def json(self):
+        req = {"command": "json_grs", "grs_index": self.id}
+        return network.send_and_receive(req)
+
+    def __str__(self):
+        return f"GRS({self.id}"
 
     def run(self, G, strat="main"):
         """
@@ -202,20 +209,11 @@ class GRS(Package):
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
-        self._build() # first ensure that the GRS is loaded in Ocaml
         req = {
             "command": "run",
             "graph": json.dumps(G.json_data()),
-            "grs_index": self.index,
+            "grs_index": self.id,
             "strat": strat
         }
-        # print("---------------------")
-        # print(req)
-        # print("-------------------------")
         reply = network.send_and_receive(req)
         return [Graph(s) for s in reply]
-
-
-    def __setitem__(self,x,v):
-        self.index = 0
-        super().__setitem__(x,v)
