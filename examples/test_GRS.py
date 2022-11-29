@@ -15,7 +15,6 @@ grs = AbstractGRS("examples/resources/test1.grs")
 print ("------------- print (grs) -------------")
 print (grs)
 
-
 print ("nb of output with strat s1 (should be 2) ---> ", end='')
 print (len (grs.run(graph, strat="s1")))
 print ("nb of output with strat s2 (should be 1) ---> ", end='')
@@ -58,8 +57,11 @@ R = Rule(req_det_n, add_det_cde)
 grs = GRS({"det":R,"s1":"det","s2":"Onf(det)","s3":"Iter(det)"})
 print ("------------- print (grs) -------------")
 print (grs)
-
+print("-------- print corresponding abstract grs--------")
 agrs = AbstractGRS(grs)
+print(agrs)
+
+print("----------- run grs with some strategies-----------")
 print ("nb of output with strat s1 (should be 2) ---> ", end='')
 print (len (agrs.run(graph, strat="s1")))
 print ("nb of output with strat s2 (should be 1) ---> ", end='')

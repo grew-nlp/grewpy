@@ -154,7 +154,7 @@ class Package(dict):
 
 class GRS(Package):
 
-    def __init__(self,args,load=False):
+    def __init__(self,args):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
         :or kwargs contains explicitly the parts of the grs
@@ -168,21 +168,9 @@ class GRS(Package):
             super().__init__(res)
         elif isinstance(args, dict):
             super().__init__( args )
-        if load:
-            self.agrs = AbstractGRS(self)
-        else:
-            self.agrs = None
 
     def __str__(self):
         return super().__str__()
-
-    def load(self):
-        self.agrs = AbstractGRS(self)
-
-    def run(self, G, strat="main"):
-        if not self.agrs:
-            raise RuntimeError("load your GRS before you run it")
-        return self.agrs.run(G, strat)
 
 class AbstractGRS:
 
@@ -200,6 +188,15 @@ class AbstractGRS:
                 req = {"command": "load_grs", "str": args}
         elif isinstance(args, GRS):
             req = {"command": "load_grs", "json": args.json_data()}
+        elif isinstance(args, dict):
+            """
+            suppose it is a GRS style
+            """
+            try:
+                grs = GRS(args)
+                req = {"command": "load_grs", "json": grs.json_data()}
+            except:
+                raise ValueError(f"cannot build a grs with {args}")
         else:
             raise ValueError(f"cannot build a grs with {args}")
     
