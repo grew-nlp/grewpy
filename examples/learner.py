@@ -90,8 +90,7 @@ if __name__ == "__main__":
     print_request_counter()
     print(len(R0))
     print_request_counter()
-    aRs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
-    Rs0 = AbstractGRS(aRs0)
+    Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'}, load=True)
     
     corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
     A = corpus.count(Request("X[];Y[];X<Y;X->Y"),[])

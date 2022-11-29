@@ -24,11 +24,8 @@ class Corpus(dict):
         :raise an error if the files was not correctly loaded
         """
         acorpus = data if isinstance(data, AbstractCorpus) else AbstractCorpus(data)
-        self._sent_ids = acorpus.get_sent_ids()
+        self._sent_ids = acorpus.get_sent_ids() #specifies the sentences order
         super().__init__(acorpus.get_all())
-
-    def __len__(self):
-        return len(self._sent_ids)
 
     def __getitem__(self, data):
         """
