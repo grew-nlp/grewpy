@@ -118,3 +118,9 @@ class Graph():
 
     def triples(self):
         return set((n, e, s) for n in self.sucs for e,s in self.sucs[n])
+
+    def run(self, Grs, strat="main"):
+        Grs.run(self, strat)
+
+    def apply(self, Grs, strat="main"):
+        Grs.apply(self, strat)
