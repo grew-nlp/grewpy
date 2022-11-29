@@ -132,5 +132,7 @@ class AbstractCorpus:
         })
 
     def __len__(self):
-        #TODO
-        return len(self.get_sent_ids())
+        return network.send_and_receive({
+            "command": "corpus_length",
+            "corpus_index": self._id,
+        })
