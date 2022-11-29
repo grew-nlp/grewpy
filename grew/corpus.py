@@ -54,24 +54,25 @@ class AbstractCorpus:
         :raise an error if the files was not correctly loaded
         """
         if isinstance(data, list):
-            req = {"command": "load_corpus", "files": data}
+            req = {"command": "corpus_load", "files": data}
             reply = network.send_and_receive(req)
         elif isinstance(data, dict):
             req = {"command": "corpus_from_dict", "graphs": {
                 sent_id: graph.json_data() for (sent_id, graph) in data.items()}}
             reply = network.send_and_receive(req)
         elif os.path.isfile(data):
-            req = {"command": "load_corpus", "files": [data]}
+            req = {"command": "corpus_load", "files": [data]}
             reply = network.send_and_receive(req)
         else:
             with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
                 f.write(data)
                 f.flush()  # to be read by others
-                req = {"command": "load_corpus", "files": [f.name]}
+                req = {"command": "corpus_load", "files": [f.name]}
                 try:
                     reply = network.send_and_receive(req)
                 except GrewError:
                     raise GrewError(data)
+        self._length = reply["length"]
         self._id = reply["index"]
 
     def get_sent_ids(self):
@@ -129,10 +130,7 @@ class AbstractCorpus:
         })
 
     def __len__(self):
-        return network.send_and_receive({
-            "command": "corpus_length",
-            "corpus_index": self._id,
-        })
+        return self._length
 
     def __iter__(self):
         return iter(self.get_sent_ids())

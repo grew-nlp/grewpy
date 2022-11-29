@@ -213,19 +213,39 @@ class AbstractGRS:
     def __str__(self):
         return f"GRS({self.id})"
 
-    def run(self, G, strat="main"):
+    def run(self, data, strat="main"):
         """
-        Apply rs or the last loaded one to [gr]
+        run a Grs on a graph
         :param grs_data: a graph rewriting system or a Grew string representation of a grs
         :param G: the graph, either a str (in grew format) or a dict
         :param strat: the strategy (by default "main")
         :return: the list of rewritten graphs
         """
+        if isinstance(data, Graph):
+            req = {
+                "command": "grs_run_graph",
+                "graph": json.dumps(G.json_data()),
+                "grs_index": self.id,
+                "strat": strat
+            }
+            reply = network.send_and_receive(req)
+            return [Graph(s) for s in reply]
+        else :
+            return 0
+
+    def apply(self, G, strat="main"):
+        """
+        run a Grs on a graph
+        :param grs_data: a graph rewriting system or a Grew string representation of a grs
+        :param G: the graph, either a str (in grew format) or a dict
+        :param strat: the strategy (by default "main")
+        :return: the rewritten graph and an error if there is not exaclty one output graph
+        """
         req = {
-            "command": "run",
+            "command": "grs_apply_graph",
             "graph": json.dumps(G.json_data()),
             "grs_index": self.id,
             "strat": strat
         }
         reply = network.send_and_receive(req)
-        return [Graph(s) for s in reply]
+        return Graph(reply)
