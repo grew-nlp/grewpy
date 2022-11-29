@@ -134,3 +134,6 @@ class AbstractCorpus:
     def __len__(self):
         #TODO
         return len(self.get_sent_ids())
+
+    def __iter__(self):
+        return iter(self.get_sent_ids())

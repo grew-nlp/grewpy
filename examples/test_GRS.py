@@ -2,16 +2,16 @@ import sys,os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))  # Use local grew lib
 import grew
-from grew import Corpus, GRS, Rule, Request, Command
+from grew import AbstractCorpus, GRS, Rule, Request, Command, AbstractGRS
 
 grew.set_config("sud")
 
-corpus = Corpus("examples/resources/test1.conllu")
+corpus = AbstractCorpus("examples/resources/test1.conllu")
 graph = corpus[0]
 
 print ("\n============================== TEST 1 ==============================")
 print ("  Build a GRS from a file (examples/resources/test1.grs)")
-grs = GRS("examples/resources/test1.grs")
+grs = AbstractGRS("examples/resources/test1.grs")
 print ("------------- print (grs) -------------")
 print (grs)
 
@@ -37,7 +37,7 @@ strat s2 { Onf (det) }
 strat s3 { Iter (det) }
 """
 
-grs = GRS(string_grs)
+grs = AbstractGRS(string_grs)
 print ("------------- print (grs) -------------")
 print (grs)
 
@@ -59,12 +59,13 @@ grs = GRS({"det":R,"s1":"det","s2":"Onf(det)","s3":"Iter(det)"})
 print ("------------- print (grs) -------------")
 print (grs)
 
+agrs = AbstractGRS(grs)
 print ("nb of output with strat s1 (should be 2) ---> ", end='')
-print (len (grs.run(graph, strat="s1")))
+print (len (agrs.run(graph, strat="s1")))
 print ("nb of output with strat s2 (should be 1) ---> ", end='')
-print (len (grs.run(graph, strat="s2")))
+print (len (agrs.run(graph, strat="s2")))
 print ("nb of output with strat s3 (should be 1) ---> ", end='')
-print (len (grs.run(graph, strat="s3")))
+print (len (agrs.run(graph, strat="s3")))
 
 print("----------------test if grs can be saved-------------")
 s = str(grs)
