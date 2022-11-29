@@ -15,61 +15,20 @@ from .utils import GrewError
 from . import network
 
 
-class Corpus():
-    def __init__(self,data, local=True):
+class Corpus(dict):
+    def __init__(self,data):
         """Load a corpus from a file of a string
         :param data: a file, a list of files or a CoNLL string representation of a corpus
         :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
-        if isinstance(data, list):
-            req = { "command": "load_corpus", "files": data }
-            reply = network.send_and_receive(req)
-        elif isinstance(data, dict):
-            req = { "command": "corpus_from_dict", "graphs": { sent_id: graph.json_data() for (sent_id,graph) in data.items() } }
-            reply = network.send_and_receive(req)
-        elif os.path.isfile(data):
-            req = { "command": "load_corpus", "files": [data] }
-            reply = network.send_and_receive(req)
-        else:
-            with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
-                f.write(data)
-                f.flush()  # to be read by others
-                req = { "command": "load_corpus", "files": [f.name] }
-                try:
-                    reply = network.send_and_receive(req)
-                except GrewError:
-                    raise GrewError(data)
-        self.id =reply["index"]
-        req = {"command": "corpus_sent_ids", "corpus_index": self.id}
-        self.sent_ids = network.send_and_receive(req)
-        if local:
-            self._local = True
-            if isinstance (data, dict):
-                self.items = data
-            else:
-                dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self.id })
-                self.items = {sid: Graph(json_data) for (sid,json_data) in dico.items() }
-        else:
-            self._local = False
-        # TODO: if data is a dict, requests corpus_get_all can be skipped
+        acorpus = data if isinstance(data, AbstractCorpus) else AbstractCorpus(data)
+        self._sent_ids = acorpus.get_sent_ids()
+        super().__init__(acorpus.get_all())
 
     def __len__(self):
-        return len(self.sent_ids)
-
-    def __setitem__(self,x,v):
-        if self._local:
-            self.items[x] = v
-        else:
-            self.update({x:v})
-
-    def _get_one_item(self,sent_id):
-        if self._local:
-            return self.items[sent_id]
-        else:
-            req = {"command": "corpus_get", "corpus_index": self.id, "sent_id": sent_id}
-            return (Graph(network.send_and_receive(req)))
+        return len(self._sent_ids)
 
     def __getitem__(self, data):
         """
@@ -79,68 +38,99 @@ class Corpus():
         :return: a graph
         """
         if isinstance(data, str):
-            return self._get_one_item(data)
+            return super().__getitem__(data)
         if isinstance(data, int):
-            return self._get_one_item(self.sent_ids[data])
+            return self[self._sent_ids[data]]
         if isinstance(data, slice):
-            return [self._get_one_item(sid) for sid in self.sent_ids[data]]
-
-    def _synchronize(self):
-        self.update(self.items)
+            return [self[sid] for sid in self._sent_ids[data]]
 
     def __iter__(self):
-        return iter(self.sent_ids)
+        return iter(self._sent_ids)
 
-    def search(self,request,clustering_keys=[]):
+
+class AbstractCorpus:
+    def __init__(self, data, local=True):
+        """Load a corpus on the CAML server
+        :param data: a file, a list of files or a CoNLL string representation of a corpus
+        :param local: state whether we load a local copy of each graph of the corpus
+        :return: an integer index for latter reference to the corpus
+        :raise an error if the files was not correctly loaded
+        """
+        if isinstance(data, list):
+            req = {"command": "load_corpus", "files": data}
+            reply = network.send_and_receive(req)
+        elif isinstance(data, dict):
+            req = {"command": "corpus_from_dict", "graphs": {
+                sent_id: graph.json_data() for (sent_id, graph) in data.items()}}
+            reply = network.send_and_receive(req)
+        elif os.path.isfile(data):
+            req = {"command": "load_corpus", "files": [data]}
+            reply = network.send_and_receive(req)
+        else:
+            with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
+                f.write(data)
+                f.flush()  # to be read by others
+                req = {"command": "load_corpus", "files": [f.name]}
+                try:
+                    reply = network.send_and_receive(req)
+                except GrewError:
+                    raise GrewError(data)
+        self._id = reply["index"]
+
+    def get_sent_ids(self):
+        req = {"command": "corpus_sent_ids", "corpus_index": self._id}
+        return network.send_and_receive(req)
+
+
+    def get(self, sent_id):
+        req = {"command": "corpus_get",
+                   "corpus_index": self._id, "sent_id": sent_id}
+        return (Graph(network.send_and_receive(req)))
+    
+    def __getitem__(self, data):
+        if isinstance(data, str):
+            return self.get(data)
+        if isinstance(data, int):
+            sids = self.get_sent_ids()
+            return self.get(sids[data])
+        if isinstance(data, slice):
+            sids = self.get_sent_ids()
+            return [self[sid] for sid in sids]
+
+
+    def get_all(self):
+        dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self._id})
+        return {sid: Graph(json_data) for (sid,json_data) in dico.items() }
+
+
+    def search(self, request, clustering_keys=[]):
         """
         Search for [request] into [corpus_index]
         :param request: a string request
         :param corpus_index: an integer given by the [corpus] function
         :return: the list of matching of [request] into the corpus
         """
-        if self._local:
-            self._synchronize()
         return network.send_and_receive({
             "command": "corpus_search",
-            "corpus_index": self.id,
+            "corpus_index": self._id,
             "request": request.json_data(),
             "clustering_keys": clustering_keys,
         })
 
-    def count(self,request,clustering_keys=[]):
+    def count(self, request, clustering_keys=[]):
         """
         Count for [request] into [corpus_index]
         :param request: a string request
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [request] into the corpus
         """
-        if self._local:
-            self._synchronize()
         return network.send_and_receive({
-                "command": "corpus_count",
-                "corpus_index": self.id,
-                "request": request.json_data(),
-                "clustering_keys": clustering_keys,
-            })
+            "command": "corpus_count",
+            "corpus_index": self._id,
+            "request": request.json_data(),
+            "clustering_keys": clustering_keys,
+        })
 
-    def map(self, app, inplace=False):
-        x = {sid : map(self[sid]) for sid in self}
-        #load(x)
-
-    def update(self, dico):
-        req = {
-            "command": "corpus_update",
-            "corpus_index": self.id,
-            "graphs": { sent_id : dico[sent_id].json_data() for sent_id in dico }
-            }
-        send_and_receive(req)
-
-    def delete(self, key_list):
-        ...
-
-
-    def init(self, dictionnaire):
-        pass
-
-    def run(self, grs, strat : str="main"):
-        pass
+    def __len__(self):
+        #TODO
+        return len(self.get_sent_ids())
