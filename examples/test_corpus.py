@@ -3,10 +3,10 @@ import sys, os, json
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
 import grew
-from grew import Graph, Corpus, Request, AbstractCorpus
+from grew import Graph, CorpusDraft, Request, Corpus
 
 pud_file = "examples/resources/pud_10.conllu"
-pud = AbstractCorpus(pud_file)
+pud = Corpus(pud_file)
 
 def print_request_counter():
     print(f"Req: {grew.network.request_counter}")
@@ -48,7 +48,7 @@ print (json.dumps(pud.count(req, ["X.lemma"]), indent=2))
 print_request_counter()
 
 
-corpus = Corpus(pud)
+corpus = CorpusDraft(pud)
 print("\n=============== Iteration on graphs of a corpus ===============")
 acc = 0
 for sent_id in corpus:
@@ -63,7 +63,7 @@ def clear_edges(graph):
 for sid in corpus:
   clear_edges(corpus[sid])
 
-noedge_corpus = AbstractCorpus(corpus)
+noedge_corpus = Corpus(corpus)
 print(" ----- counting nsubj within corpus -----")
 dep = "nsubj"
 req = Request(f"X[];Y[];X -[{dep}]-> Y")

@@ -5,7 +5,7 @@ from . import network
 from . import utils
 from .grew import JSON
 from grew.graph import Graph
-from .corpus import AbstractCorpus, Corpus
+from .corpus import Corpus, CorpusDraft
 
 class ClauseList():
     def __init__(self,sort : str,*L):
@@ -153,7 +153,7 @@ class Package(dict):
         return filter(lambda x: isinstance(self[x], str), self.__iter__())
 
 
-class GRS(Package):
+class GRSDraft(Package):
 
     def __init__(self,args):
         """Load a grs stored in a file
@@ -163,7 +163,7 @@ class GRS(Package):
         :raise an error if the file was not correctly loaded
         """
         if isinstance(args,str):
-            agrs = AbstractGRS(args)
+            agrs = GRS(args)
             json_data = agrs.json()
             res = Package._from_json(json_data["decls"])
             super().__init__(res)
@@ -173,7 +173,7 @@ class GRS(Package):
     def __str__(self):
         return super().__str__()
 
-class AbstractGRS:
+class GRS:
 
     def __init__(self, args):
         """Load a grs stored in a file
@@ -187,14 +187,14 @@ class AbstractGRS:
                 req = {"command": "load_grs", "filename": args}
             else:
                 req = {"command": "load_grs", "str": args}
-        elif isinstance(args, GRS):
+        elif isinstance(args, GRSDraft):
             req = {"command": "load_grs", "json": args.json_data()}
         elif isinstance(args, dict):
             """
             suppose it is a GRS style
             """
             try:
-                grs = GRS(args)
+                grs = GRSDraft(args)
                 req = {"command": "load_grs", "json": grs.json_data()}
             except:
                 raise ValueError(f"cannot build a grs with {args}")
@@ -228,7 +228,7 @@ class AbstractGRS:
             }
             reply = network.send_and_receive(req)
             return [Graph(s) for s in reply]
-        elif isinstance(data, AbstractCorpus):
+        elif isinstance(data, Corpus):
             req = {
                 "command": "grs_run_corpus",
                 "corpus": data.get_id(),
@@ -237,7 +237,7 @@ class AbstractGRS:
             }
             reply = network.send_and_receive(req)
             return {sid: [Graph(s) for s in L] for sid, L in reply.items() } 
-        elif isinstance(data, Corpus):
+        elif isinstance(data, CorpusDraft):
             return {sid: self.run(g) for sid,g in data.items() } 
 
     def apply(self, data, strat="main", abstract=True):
@@ -257,7 +257,7 @@ class AbstractGRS:
             }
             reply = network.send_and_receive(req)
             return Graph(reply)
-        elif isinstance(data, AbstractCorpus):
+        elif isinstance(data, Corpus):
             req = {
                 "command": "grs_apply_corpus",
                 "corpus": data.get_id(),
@@ -265,7 +265,7 @@ class AbstractGRS:
                 "strat": strat
             } # return None because inplace
             network.send_and_receive(req)
-            return data if abstract else Corpus (data)
-        elif isinstance(data, Corpus):
-            acorpus = AbstractCorpus(data)
+            return data if abstract else CorpusDraft (data)
+        elif isinstance(data, CorpusDraft):
+            acorpus = Corpus(data)
             self.apply(acorpus, strat, abstract)

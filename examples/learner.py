@@ -3,8 +3,8 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
 import grew
-from grew import AbstractCorpus, AbstractGRS
-from grew import Request, Rule, Command, GRS, Graph, Corpus
+from grew import Corpus, GRS
+from grew import Request, Rule, Command, GRSDraft, Graph, CorpusDraft
 import numpy as np
 
 #type declaration
@@ -16,7 +16,7 @@ Observation = dict[str,dict[str,Count]]
 def print_request_counter():
     print(f"Req: {grew.network.request_counter}")
 
-def cluster(c : AbstractCorpus, P : Request, n1 : str,n2 : str) -> Observation:
+def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     search for P within c
     n1 and n2 are nodes within P
@@ -50,7 +50,7 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name):
                 R = Rule(P,Command(f"add_edge {n1}-[{x}]->{n2}"))
                 rules[f"_{p1}_{rule_name}_{p2}_"] = R
 
-def rank0(c : AbstractCorpus) -> dict[str,Rule]:
+def rank0(c : Corpus) -> dict[str,Rule]:
     """
     builds all rank 0 rules
     """
@@ -76,23 +76,24 @@ def clear_edges(graph):
 
 if __name__ == "__main__":
     print_request_counter()
-    corpus = AbstractCorpus("examples/resources/fr_pud-ud-test.conllu")
+    corpus = Corpus("examples/resources/fr_pud-ud-test.conllu")
     print_request_counter()
     R0 = rank0(corpus)
     print_request_counter()
-    g0s = Corpus(corpus)
+    g0s = CorpusDraft(corpus)
     for sid,g in g0s.items():
         clear_edges(g)
-    cstart = AbstractCorpus(g0s)
+    cstart = Corpus(g0s)
 
     print_request_counter()
     print(verify(cstart, corpus))
     print_request_counter()
     print(len(R0))
     print_request_counter()
-    Rs0 = AbstractGRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
+    Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
     
-    corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
+    corpus1 = Rs0.run(cstart,strat="main")
+    #corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
     A = corpus.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus.count(Request("X[];Y[];Y<X;X->Y"), [])
     print(A)

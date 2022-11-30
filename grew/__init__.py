@@ -3,8 +3,8 @@ Grew python library
 All you need to use grew 
 See grew online documentation for global informations
 """
-from .corpus import Corpus, AbstractCorpus
-from .grs import Request, GRS, Package, Rule, Command, AbstractGRS
+from .corpus import CorpusDraft, Corpus
+from .grs import Request, GRSDraft, Package, Rule, Command, GRS
 from .graph import Graph
 from .network import init
 
