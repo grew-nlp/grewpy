@@ -93,7 +93,7 @@ def send_and_receive(msg):
             except:
                 return None
         elif reply["status"] == "ERROR":
-            raise GrewError({"function": msg["command"], "message": "ERROR"})
+            raise GrewError({"function": msg["command"], "message": reply["message"]})
     except socket.error:
         raise GrewError({"function": msg["command"], "message" : 'Socket error'})
     except AttributeError as e: # connect issue
