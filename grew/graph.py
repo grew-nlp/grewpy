@@ -119,6 +119,15 @@ class Graph():
     def triples(self):
         return set((n, e, s) for n in self.sucs for e,s in self.sucs[n])
 
+    def edge(self, n, s):
+        """
+        return the label in the edge if it exists
+        """
+        for (k,v) in self.suc(n):
+            if k == s:
+                return str(v)
+        
+
     def run(self, Grs, strat="main"):
         Grs.run(self, strat)
 

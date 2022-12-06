@@ -9,7 +9,7 @@ from . import network
 
 ''' Library tools '''
 
-JSON = dict[str,typing.Any] | list[typing.Any] | str | int
+JSON = typing.Any #dict[str,typing.Any] | list[typing.Any] | str | int
 
 def set_config(data):
     """

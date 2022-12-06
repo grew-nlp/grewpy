@@ -37,6 +37,9 @@ class ClauseList():
         its = ";".join([str(x) for x in self.items])
         return f"{self.sort} {{{its}}}"
 
+    def __repr__(self):
+        return f"{self.sort} {{{ ';'.join([str(x) for x in self.items]) }}}"
+
 class Request():
     """
     lists of ClauseList
@@ -56,8 +59,15 @@ class Request():
                 elts += (e,)
             elif isinstance(e,Request):
                 elts += e.items
+            elif isinstance(e,tuple): #supposed to be a list of ClauseList
+                elts += e
             else:
-                raise ValueError(f"{e} cannot be used to build a Request")
+                try:
+                    #suppose it is a generator
+                    for x in e:
+                        elts += (x,)
+                except:
+                    raise ValueError(f"{e} cannot be used to build a Request")
         self.items = elts
 
     def without(self, *L):
@@ -74,6 +84,15 @@ class Request():
 
     def __str__(self):
         return "\n".join([str(e) for e in self.items])
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def pattern(self):
+        """
+        return the pattern of self as a tuple
+        """
+        return Request(p for p in self.items if p.sort == "pattern")
 
 class Command(list):
     def __init__(self, *L):
@@ -102,6 +121,9 @@ class Rule():
         return {"request" : p, "commands" : self.commands}
 
     def __str__(self):
+        return f"{str(self.request)}\n{str(self.commands)}"
+
+    def __repr__(self):
         return f"{str(self.request)}\n{str(self.commands)}"
 
     @classmethod
@@ -154,6 +176,11 @@ class Package(dict):
 
 
 class GRSDraft(Package):
+    """
+    A GRSDraft is a structure that gives access to the internals of a 
+    Graph Rewriting System: packages, rules, patterns, strategies, etc
+    It cannot be used to perform rewriting, for that, use a GRS
+    """
 
     def __init__(self,args):
         """Load a grs stored in a file
@@ -174,6 +201,11 @@ class GRSDraft(Package):
         return super().__str__()
 
 class GRS:
+    """
+    An abstract GRS. Offers the possibility to apply rewriting.
+    The object is abstract and cannot be changed. 
+    For that, use a GRSDraft
+    """
 
     def __init__(self, args):
         """Load a grs stored in a file
