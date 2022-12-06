@@ -239,7 +239,7 @@ if __name__ == "__main__":
     print(new_rules)
     print(len(new_rules))
 
-    Rse = GRS(new_rules | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
+    Rse = GRS(new_rules | {'main': f'Onf(Alt({",".join([r for r in new_rules])}))'})
 
     #corpus1 = Rs0.run(cstart,strat="main")
     corpus1 = Corpus({sid: Rse.run(g0s[sid], 'main')[0] for sid in cstart})
