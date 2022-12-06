@@ -94,6 +94,10 @@ class Request():
         """
         return Request(p for p in self.items if p.sort == "pattern")
 
+    def append(self, sorte, clause):
+        self.items = self.items + (ClauseList(sorte, clause),)
+
+
 class Command(list):
     def __init__(self, *L):
         super().__init__()

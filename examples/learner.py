@@ -169,14 +169,13 @@ def refine_rule(rule_name, R, corpus, n1, n2):
         branches = find_classes(clf)
         for node in branches:
             branch=branches[node]
-            pos, neg = R.request.pattern(), []
+            r = R.request.pattern()
             for i in range(0, len(branch), 2):
-                n, feat, feat_value = fpat[i]
-                if fpat[i+1]:
-                    neg.append(f"{n}[{feat}={feat_value}]")
+                n, feat, feat_value = fpat[branch[i]]
+                if branch[i+1]:
+                    r = r.without(f"{n}[{feat}={feat_value}]")
                 else:
-                    pos.append(f"{n}[{feat}={feat_value}]")
-            r = Request(pos).without(neg)
+                    r.append("pattern",f"{n}[{feat}={feat_value}]")
             e = y1[ clf.tree_.value[node].argmax()]
             if e:
                 r = r.without(f"{n1} -[{e}]-> {n2}")
