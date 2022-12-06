@@ -228,7 +228,11 @@ if __name__ == "__main__":
             new_r = refine_rule(rule_name, R, corpus, X, Y)
             if new_r:
                 cpt = 1
+                print("--------------------------replace")
+                print(R)
                 for r in new_r:
+                    print("by : ")
+                    print(r)
                     new_rules[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
             else:
