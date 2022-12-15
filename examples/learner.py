@@ -42,7 +42,7 @@ def anomaly(obs : Count, threshold : float):
             return x, obs[x]/s
     return None, None
 
-def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval):
+def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, threshold):
     """
     build rules corresponding to request requirement with help of corpus
     n1, n2 two nodes on which we do a cluster
@@ -50,7 +50,7 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval):
     obslr = cluster(corpus, requirement, n1, n2)
     for p1, v in obslr.items():
         for p2, es in v.items():
-            (x, p) = anomaly(es, 0.5) #the feature edge x has majority
+            (x, p) = anomaly(es, threshold) #the feature edge x has majority
             if x:
                 #build the rule            
                 P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement).without( f"{n1}-[{x}]->{n2}")
@@ -65,8 +65,8 @@ def rank0(c : Corpus) -> dict[str,Rule]:
     """
     rules = dict()
     rule_eval = dict()
-    build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval)
-    build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval)
+    build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, 0.5)
+    build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, 0.5)
     return rules, rule_eval
 
 def edge_verification(g: Graph, h : Graph) -> np.array : 
@@ -96,14 +96,14 @@ def get_tree(X,y):
         return None
     if max(y) == 0:
         return None
-    X_train, X_test, y_train, y_test = train_test_split(X, y)    
-    clf = DecisionTreeClassifier(max_depth=3, max_leaf_nodes=max(y)+1)
-    clf.fit(X_train, y_train)
+    #X_train, X_test, y_train, y_test = train_test_split(X, y)    
+    clf = DecisionTreeClassifier(max_depth=3, max_leaf_nodes=max(y)+1, min_samples_leaf=10)
+    clf.fit(X, y)
     return clf
 
 def fvs(matchings, corpus):
     """
-    return the list of (feature,values) of nodes X and Y in the matchings
+    return the set of (feature,values) of nodes X and Y in the matchings
     """
     features = {'X' : dict(), 'Y':dict()}
     for m in matchings:
@@ -138,7 +138,6 @@ def create_classifier(matchings, pos, corpus):
     return get_tree(X,y), {y1[i] : i for i in y1}
 
 
-
 def find_classes(clf):
     def branches(pos, tree, current, acc, threshold):
         if tree.feature[pos] >= 0:
@@ -156,7 +155,7 @@ def find_classes(clf):
                 acc[pos] = current
     tree = clf.tree_
     bs = dict()
-    branches(0, tree, tuple(), bs, 0.1)
+    branches(0, tree, tuple(), bs, 0.001)
     return bs
 
 def refine_rule(rule_name, R, corpus, n1, n2):
@@ -165,7 +164,6 @@ def refine_rule(rule_name, R, corpus, n1, n2):
     pos, fpat = fvs(matchings, corpus)
     clf, y1 = create_classifier(matchings, pos, corpus)
     if clf:
-        tree.plot_tree(clf)
         branches = find_classes(clf)
         for node in branches:
             branch=branches[node]
@@ -173,9 +171,9 @@ def refine_rule(rule_name, R, corpus, n1, n2):
             for i in range(0, len(branch), 2):
                 n, feat, feat_value = fpat[branch[i]]
                 if branch[i+1]:
-                    r = r.without(f"{n}[{feat}={feat_value}]")
+                    r = r.without(f'{n}[{feat}="{feat_value}"]')
                 else:
-                    r.append("pattern",f"{n}[{feat}={feat_value}]")
+                    r.append("pattern",f'{n}[{feat}="{feat_value}"]')
             e = y1[ clf.tree_.value[node].argmax()]
             if e:
                 r = r.without(f"{n1} -[{e}]-> {n2}")
@@ -222,24 +220,30 @@ if __name__ == "__main__":
     print(len(R0))
     new_rules = dict()
     for rule_name, R in R0.items():
-        if rule_eval[rule_name][1] < 0.7:
+        if rule_eval[rule_name][1] < 0.9:
             X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
             new_r = refine_rule(rule_name, R, corpus, X, Y)
-            if new_r:
+            if new_r and len(new_r) == 2:
                 cpt = 1
+                
                 print("--------------------------replace")
                 print(R)
+                
                 for r in new_r:
+                    
                     print("by : ")
                     print(r)
+                    
                     new_rules[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
-            else:
+            elif rule_eval[rule_name][1] > 0.8:
                 new_rules[rule_name] = R
         else:
             new_rules[rule_name] = R
 
+    """
     print(new_rules)
+    """
     print(len(new_rules))
 
     Rse = GRS(new_rules | {'main': f'Onf(Alt({",".join([r for r in new_rules])}))'})
