@@ -83,9 +83,13 @@ class Graph():
     def __iter__(self):
         return iter(self.features)
 
-    def sucs(self, nid):
-        #return self.sucs[nid] if nid in self.sucs else
-        return self._sucs.get(nid, [])
+    @property
+    def sucs(self):
+        return self._sucs
+
+    @sucs.setter
+    def sucs(self, k,v):
+        self._suc[k] = v
 
     def to_dot(self): # TODO fix it
         """
@@ -132,10 +136,11 @@ class Graph():
         """
         return the label in the edge if it exists
         """
-        for (k,v) in self.suc(n):
-            if k == s:
-                return str(v)
-        
+        if n in self._sucs:
+            for (k,v) in self.sucs[n]:
+                if k == s:
+                    return str(v)
+        return None
 
     def run(self, Grs, strat="main"):
         Grs.run(self, strat)

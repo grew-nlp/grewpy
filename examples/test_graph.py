@@ -28,9 +28,9 @@ print (f"|nodes| = {(len (g1))}")
 
 print (g1["A"])
 print ("---- sucs 2 ----")
-print (g1.suc("A"))
+print (g1.sucs["A"])
 print ("---- sucs 1 ----")
-print (g1.suc("B"))
+print (g1.sucs["B"])
 
 
 print ("---- JSON output of a graph ----")
