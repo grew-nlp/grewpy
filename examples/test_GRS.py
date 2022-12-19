@@ -1,10 +1,10 @@
 import sys,os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))  # Use local grew lib
-import grew
-from grew import Corpus, GRSDraft, Rule, Request, Commands, GRS
 
-grew.set_config("sud")
+from grewpy import Corpus, GRSDraft, Rule, Request, Commands, GRS, set_config
+
+set_config("sud")
 
 corpus = Corpus("examples/resources/test1.conllu")
 graph = corpus[0]

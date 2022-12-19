@@ -17,3 +17,6 @@ def set_config(data):
     See https://grew.fr/doc/graph/#edges for details about config
     """
     return network.send_and_receive({"command": "set_config", "config": data})
+
+def request_counter():
+    return network.request_counter

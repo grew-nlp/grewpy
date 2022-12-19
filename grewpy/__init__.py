@@ -8,6 +8,6 @@ from .grs import Request, GRSDraft, Package, Rule, Commands, Command, GRS
 from .graph import Graph
 from .network import init
 
-from .grew import set_config
+from .grew import set_config, request_counter
 
-init(False)
+init()

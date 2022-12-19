@@ -6,9 +6,9 @@ import sys, os
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-import grew
-from grew import Corpus, GRS
-from grew import Request, Rule, Commands, Command, GRSDraft, Graph, CorpusDraft
+import grewpy
+from grewpy import Corpus, GRS
+from grewpy import Request, Rule, Commands, Command, GRSDraft, Graph, CorpusDraft
 import numpy as np
 
 #type declaration
@@ -17,11 +17,11 @@ Observation = dict[str,dict[str,Count]]
 #Observation is a dict mapping'VERB' to a dict mapping 'NOUN' to {'' : 10, 'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 #'' meaning no relationships
     
-grew.set_config("sud")
+grewpy.set_config("sud")
 
 
 def print_request_counter():
-    print(f"Req: {grew.network.request_counter}")
+    print(f"Req: {grewpy.network.request_counter}")
 
 def build_grs(rules : dict):
     """
@@ -235,29 +235,21 @@ if __name__ == "__main__":
         "feat_value_size_limit": 10,
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
     }
-    # print_request_counter()
     # corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
     corpus_gold = Corpus("examples/resources/pud_10.conllu")
-    # print_request_counter()
     R0, rule_eval = rank0(corpus_gold, param)
-    # print_request_counter()
 
 
     corpus_empty = corpus_remove_edges(corpus_gold)
-    # print_request_counter()
     print(verify(corpus_empty, corpus_gold))
-    # print_request_counter()
     print(f"len(R0) = {len(R0)}")
-    # print_request_counter()
     Rs0 = build_grs(R0)
     
     corpus_rank0 = Corpus({ sid : Rs0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
     print(f"A = {A}")
-    # print_request_counter()
     print(verify(corpus_rank0, corpus_gold))
-    # print_request_counter()
 
     print(f"len(R0) = {len(R0)}")
     new_rules = dict()
@@ -278,8 +270,6 @@ if __name__ == "__main__":
                     
                     new_rules[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
-            elif rule_eval[rule_name][1] > param["valid_threshold"]:
-                new_rules[rule_name] = R
         else:
             new_rules[rule_name] = R
 
@@ -288,5 +278,4 @@ if __name__ == "__main__":
 
     corpus_rank0_refined = Corpus({sid: Rse.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     print(f"A = {A}")
-    # print_request_counter()
     print(verify(corpus_rank0_refined, corpus_gold))

@@ -3,7 +3,7 @@ import os.path
 import json
 sys.path.insert(0,os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-from grew import Graph
+from grewpy import Graph
 
 g_str = """
 {

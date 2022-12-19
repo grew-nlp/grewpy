@@ -27,9 +27,9 @@ def pid_exist(pid):
     except:
         return 0
 
-def init(dev):
+def init():
     global port, remote_ip, caml_pid
-    grewpy = "grewpy_dev" if dev else "grewpy"
+    grewpy = "grewpy_backend"
     if not pid_exist(caml_pid):
         python_pid = os.getpid()
         while (port<8898):

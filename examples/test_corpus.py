@@ -2,24 +2,20 @@ import sys, os, json
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-import grew
-from grew import Graph, CorpusDraft, Request, Corpus
+from grewpy import Graph, CorpusDraft, Request, Corpus, request_counter
 
 pud_file = "examples/resources/pud_10.conllu"
 pud = Corpus(pud_file)
 
-def print_request_counter():
-    print(f"Req: {grew.network.request_counter}")
-
 print ("\n=============== len ===============")
 print(f"nb of graph in {pud_file} = {len(pud)}")
-print_request_counter()
+print (request_counter())
 
 print ("\n=============== Get one graph ===============")
 sent_id="n01003013"
 graph = pud[sent_id]
 print(f"nb of nodes of {sent_id} = ", len(graph))
-print_request_counter()
+print (request_counter())
 
 print(f"len(pud[0]) = {len(pud[0])}")
 print(f"len(pud[-1]) = {len(pud[-1])}")
@@ -33,7 +29,7 @@ acc = 0
 for sent_id in pud.get_sent_ids():
   acc += len(pud[sent_id])
 print(f"nb of nodes in {pud_file} = ", acc)
-print_request_counter()
+print (request_counter())
 
 print ("\n=============== Count request in a corpus ===============")
 upos="ADV"
@@ -45,7 +41,7 @@ print(f"nb of {upos} in {pud_file} = ", pud.count(req))
 print (" ----- count with clustering -----")
 print(f"nb of {upos} in {pud_file}, clustered by lemma:")
 print (json.dumps(pud.count(req, ["X.lemma"]), indent=2))
-print_request_counter()
+print (request_counter())
 
 
 corpus = CorpusDraft(pud)
@@ -54,7 +50,7 @@ acc = 0
 for sent_id in corpus:
   acc += len(corpus[sent_id])
 print(f"nb of nodes in {pud_file} = ", acc)
-print_request_counter()
+print (request_counter())
 
 def clear_edges(graph):
     for n in graph:

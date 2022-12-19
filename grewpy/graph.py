@@ -7,9 +7,9 @@ import copy
 import tempfile
 import json
 
-from grew.utils import GrewError
-from grew.network import send_and_receive
-from grew import utils
+from grewpy.utils import GrewError
+from grewpy.network import send_and_receive
+from grewpy import utils
 
 ''' interfaces'''
 class Fs_edge(dict):
