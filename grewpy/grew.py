@@ -11,6 +11,19 @@ from . import network
 
 JSON = typing.Any #dict[str,typing.Any] | list[typing.Any] | str | int
 
+class GrewError(Exception):
+    """A wrapper for grew-related errors"""
+
+    def __init__(self, message):
+        self.value = message
+    def __str__(self):
+        if isinstance(self.value, dict):
+            return ("\n".join (("", "-"*80, json.dumps(self.value, indent=2), "-"*80)))
+        else:
+            return ("\n".join (("", "="*80, str (self.value), "="*80)))
+
+GrewError.__doc__ = "A wrapper for grew-related errors"
+
 def set_config(data):
     """
     Change the configuration used in the next exchanges

@@ -36,23 +36,6 @@ grewpy.grs module
     :undoc-members:
     :show-inheritance:
 
-grewpy.network module
----------------------
-
-.. automodule:: grewpy.network
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-grewpy.utils module
--------------------
-
-.. automodule:: grewpy.utils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 Module contents
 ---------------
 

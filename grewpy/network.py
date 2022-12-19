@@ -7,7 +7,7 @@ import os.path
 import json
 import os
 
-from .utils import GrewError
+from .grew import GrewError
 
 host = 'localhost'
 port = 8888

@@ -11,7 +11,7 @@ import typing
 
 from .network import send_and_receive
 from .graph import Graph
-from .utils import GrewError
+from .grew import GrewError
 from . import network
 
 
