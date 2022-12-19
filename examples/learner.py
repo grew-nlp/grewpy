@@ -59,14 +59,14 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, thresh
                 rules[rn] = R
                 rule_eval[rn] = (x,p)
 
-def rank0(c : Corpus) -> dict[str,Rule]:
+def rank0(corpus : Corpus, param) -> dict[str,Rule]:
     """
     builds all rank 0 rules
     """
     rules = dict()
     rule_eval = dict()
-    build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, 0.5)
-    build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, 0.5)
+    build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, param["base_threshold"])
+    build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, param["base_threshold"])
     return rules, rule_eval
 
 def edge_verification(g: Graph, h : Graph) -> np.array : 
@@ -74,34 +74,46 @@ def edge_verification(g: Graph, h : Graph) -> np.array :
     E2 = h.triples()
     return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
-def verify(corpus1, corpus2):
+def verify(corpus_test, corpus_gold):
     """
     given two corpora, outputs the number of common edges, only left ones and only right ones
     """
-    return list(np.sum([edge_verification(corpus1[sid],corpus2[sid]) for sid in corpus1], axis=0))
+    (common, left, right) = np.sum([edge_verification(corpus_test[sid],corpus_gold[sid]) for sid in corpus_test], axis=0)
+    precision = common / (common + left)
+    recall = common / (common + right)
+    f_measure = 2*precision*recall / (precision+recall)
+    return { 
+        "common": common, 
+        "left": left, 
+        "right": right, 
+        "precision": round (precision, 3),
+        "recall": round (recall, 3),
+        "f_measure": round(f_measure, 3),
+    }
+
 
 def clear_edges(graph):
     for n in graph:
         graph.sucs[n] = []
 
-def nofilter(n,k,v):
-    if len(v) > 10 or len(v) == 1:
+def nofilter(k,v,param):
+    if len(v) > param["feat_value_size_limit"] or len(v) == 1:
         return False
-    if k in {'xpos', 'upos', 'SpaceAfter'}:
+    if k in param["skip_features"]:
         return False
     return True
 
-def get_tree(X,y):
+def get_tree(X,y,param):
     if not X or not len(X[0]):
         return None
     if max(y) == 0:
         return None
     #X_train, X_test, y_train, y_test = train_test_split(X, y)    
-    clf = DecisionTreeClassifier(max_depth=3, max_leaf_nodes=max(y)+1, min_samples_leaf=10)
+    clf = DecisionTreeClassifier(max_depth=param["max_depth"], max_leaf_nodes=max(y)+1, min_samples_leaf=param["min_samples_leaf"])
     clf.fit(X, y)
     return clf
 
-def fvs(matchings, corpus):
+def fvs(matchings, corpus, param):
     """
     return the set of (feature,values) of nodes X and Y in the matchings
     """
@@ -115,10 +127,10 @@ def fvs(matchings, corpus):
                 if k not in features[n]:
                     features[n][k] = set()
                 features[n][k].add(v)
-    features = [(n,k,fv) for n in features for k,v in features[n].items() if nofilter(n,k,v) for fv in v]
+    features = [(n,k,fv) for n in features for k,v in features[n].items() if nofilter(k,v,param) for fv in v]
     return {features[i]: i for i in range(len(features))}, features
 
-def create_classifier(matchings, pos, corpus):
+def create_classifier(matchings, pos, corpus, param):
     X, y1,y = [], dict(), list()
     for m in matchings:
         graph = corpus[m["sent_id"]]
@@ -135,7 +147,7 @@ def create_classifier(matchings, pos, corpus):
         y.append(y1[e])
         X.append(obs)
     
-    return get_tree(X,y), {y1[i] : i for i in y1}
+    return get_tree(X,y,param), {y1[i] : i for i in y1}
 
 
 def find_classes(clf):
@@ -155,14 +167,14 @@ def find_classes(clf):
                 acc[pos] = current
     tree = clf.tree_
     bs = dict()
-    branches(0, tree, tuple(), bs, 0.001)
+    branches(0, tree, tuple(), bs, 0.01)
     return bs
 
-def refine_rule(rule_name, R, corpus, n1, n2):
+def refine_rule(rule_name, R, corpus, n1, n2, param):
     res = []
     matchings = corpus.search(R.request.pattern())
-    pos, fpat = fvs(matchings, corpus)
-    clf, y1 = create_classifier(matchings, pos, corpus)
+    pos, fpat = fvs(matchings, corpus, param)
+    clf, y1 = create_classifier(matchings, pos, corpus, param)
     if clf:
         branches = find_classes(clf)
         for node in branches:
@@ -190,39 +202,48 @@ def refine_rule(rule_name, R, corpus, n1, n2):
         """
         
 if __name__ == "__main__":
-    print_request_counter()
-    corpus = Corpus("examples/resources/fr_pud-ud-test.conllu")
-    print_request_counter()
-    R0, rule_eval = rank0(corpus)
-    print_request_counter()
-    g0s = CorpusDraft(corpus)
+    param = {
+        "base_threshold": 0.5,
+        "valid_threshold": 0.9,
+        "max_depth": 3,
+        "min_samples_leaf": 5,
+        "max_leaf_node": 5,  # unused see DecisionTreeClassifier.max_leaf_node
+        "feat_value_size_limit": 10,
+        "skip_features": ['xpos', 'upos', 'SpaceAfter'],
+    }
+    # print_request_counter()
+    # corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    corpus_gold = Corpus("examples/resources/pud_10.conllu")
+    # print_request_counter()
+    R0, rule_eval = rank0(corpus_gold, param)
+    # print_request_counter()
+
+    g0s = CorpusDraft(corpus_gold)
     for sid,g in g0s.items():
         clear_edges(g)
-    cstart = Corpus(g0s)
+    corpus_empty = Corpus(g0s)
 
-    print_request_counter()
-    print(verify(cstart, corpus))
-    print_request_counter()
-    print(len(R0))
-    print_request_counter()
+    # print_request_counter()
+    print(verify(corpus_empty, corpus_gold))
+    # print_request_counter()
+    print(f"len(R0) = {len(R0)}")
+    # print_request_counter()
     Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
     
-    #corpus1 = Rs0.run(cstart,strat="main")
-    corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
-    A = corpus.count(Request("X[];Y[];X<Y;X->Y"),[])
-    A += corpus.count(Request("X[];Y[];Y<X;X->Y"), [])
-    print(A)
-    print_request_counter()
-    print(verify(corpus1, corpus))
-    print_request_counter()
-    draftcorpus = CorpusDraft(corpus)
+    corpus_rank0 = Corpus({ sid : Rs0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
+    A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
+    print(f"A = {A}")
+    # print_request_counter()
+    print(verify(corpus_rank0, corpus_gold))
+    # print_request_counter()
 
-    print(len(R0))
+    print(f"len(R0) = {len(R0)}")
     new_rules = dict()
     for rule_name, R in R0.items():
-        if rule_eval[rule_name][1] < 0.9:
+        if rule_eval[rule_name][1] < param["valid_threshold"]:
             X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
-            new_r = refine_rule(rule_name, R, corpus, X, Y)
+            new_r = refine_rule(rule_name, R, corpus_gold, X, Y, param)
             if new_r and len(new_r) == 2:
                 cpt = 1
                 
@@ -244,25 +265,12 @@ if __name__ == "__main__":
     """
     print(new_rules)
     """
-    print(len(new_rules))
+    print(f"len(new_rules) = {len(new_rules)}")
+    # print(new_rules)
 
     Rse = GRS(new_rules | {'main': f'Onf(Alt({",".join([r for r in new_rules])}))'})
 
-    #corpus1 = Rs0.run(cstart,strat="main")
-    corpus1 = Corpus({sid: Rse.run(g0s[sid], 'main')[0] for sid in cstart})
-    print(A)
-    print_request_counter()
-    print(verify(corpus1, corpus))
-
-
-
-                
-
-
-
-
-
-                
-
-
-
+    corpus_rank0_refined = Corpus({sid: Rse.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    print(f"A = {A}")
+    # print_request_counter()
+    print(verify(corpus_rank0_refined, corpus_gold))
