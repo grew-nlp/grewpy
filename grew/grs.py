@@ -98,7 +98,22 @@ class Request():
         self.items = self.items + (ClauseList(sorte, clause),)
 
 
-class Command(list):
+class Command:
+    def __init__(self,t,s):
+        """
+        self.t = data associated to the command
+        self.s = str representation of the command
+        """
+        self.t = t
+        self.s = s
+
+    def add_edge(X,e,Y):
+        return Command( (X,e,Y), f"{X}-[{e}]->{Y}")
+    
+    def __str__(self):
+        return self.s
+
+class Commands(list):
     def __init__(self, *L):
         super().__init__()
         for elt in L:
@@ -106,9 +121,11 @@ class Command(list):
                 self += [t.strip() for t in elt.split(";") if t.strip()]
             elif isinstance(elt,list):
                 self += elt
+            elif isinstance(elt, Command):
+                self.append(elt)
 
     def __str__(self):
-        c = ";".join(self)
+        c = ";".join([str(x) for x in self])
         return f"commands {{{c}}}"
 
     @classmethod
@@ -116,7 +133,7 @@ class Command(list):
         return cls(*json_data)
 
 class Rule():
-    def __init__(self, request : Request, cmd_list : Command):
+    def __init__(self, request : Request, cmd_list : Commands):
         self.request = request
         self.commands = cmd_list
 
@@ -134,7 +151,7 @@ class Rule():
     def from_json(cls,json_data):
         # print(json_data)
         reqs = Request.from_json(json_data["request"])
-        cmds = Command.from_json(json_data["commands"])
+        cmds = Commands.from_json(json_data["commands"])
         return cls(reqs,cmds)
 
 class Package(dict):

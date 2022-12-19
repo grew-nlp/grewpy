@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../
 
 import grew
 from grew import Corpus, GRS
-from grew import Request, Rule, Command, GRSDraft, Graph, CorpusDraft
+from grew import Request, Rule, Commands, Command, GRSDraft, Graph, CorpusDraft
 import numpy as np
 
 #type declaration
@@ -54,7 +54,7 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, thresh
             if x:
                 #build the rule            
                 P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement).without( f"{n1}-[{x}]->{n2}")
-                R = Rule(P,Command(f"add_edge {n1}-[{x}]->{n2}"))
+                R = Rule(P, Commands( Command.add_edge(n1,x,n2)))
                 rn = f"_{p1}_{rule_name}_{p2}_"
                 rules[rn] = R
                 rule_eval[rn] = (x,p)
@@ -97,7 +97,7 @@ def get_tree(X,y):
     if max(y) == 0:
         return None
     #X_train, X_test, y_train, y_test = train_test_split(X, y)    
-    clf = DecisionTreeClassifier(max_depth=3, max_leaf_nodes=max(y)+1, min_samples_leaf=10)
+    clf = DecisionTreeClassifier(max_depth=3, max_leaf_nodes=max(y)+1, min_samples_leaf=5)
     clf.fit(X, y)
     return clf
 
@@ -155,7 +155,7 @@ def find_classes(clf):
                 acc[pos] = current
     tree = clf.tree_
     bs = dict()
-    branches(0, tree, tuple(), bs, 0.001)
+    branches(0, tree, tuple(), bs, 0.01)
     return bs
 
 def refine_rule(rule_name, R, corpus, n1, n2):
@@ -177,7 +177,7 @@ def refine_rule(rule_name, R, corpus, n1, n2):
             e = y1[ clf.tree_.value[node].argmax()]
             if e:
                 r = r.without(f"{n1} -[{e}]-> {n2}")
-                rule = Rule(r, Command(f"add_edge {n1}-[{e}]-> {n2}"))
+                rule = Rule(r, Commands(f"add_edge {n1}-[{e}]-> {n2}"))
                 res.append(rule)
     return res
     """
