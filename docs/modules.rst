@@ -1,7 +1,7 @@
-grew
-====
+grewpy
+======
 
 .. toctree::
    :maxdepth: 4
 
-   grew
+   grewpy
