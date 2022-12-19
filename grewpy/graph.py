@@ -7,7 +7,7 @@ import copy
 import tempfile
 import json
 
-from grewpy.utils import GrewError
+from grewpy.grew import GrewError
 from grewpy.network import send_and_receive
 from grewpy import utils
 
