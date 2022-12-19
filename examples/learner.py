@@ -18,8 +18,25 @@ Observation = dict[str,dict[str,Count]]
 #'' meaning no relationships
     
 grew.set_config("sud")
+
+
 def print_request_counter():
     print(f"Req: {grew.network.request_counter}")
+
+def build_grs(rules):
+    """
+    rules is a dict of Rules supposed to contain one Command() of type add_edge
+    we add the without Clause to Rules and we add a main strategy
+    """
+    grs = dict()
+    for rule_name, rule in rules.items():
+        cde = rule.commands[0]
+        safe_rule = Rule( rule.request.without(cde.safe()), rule.commands)
+        grs[rule_name] = safe_rule
+    grs["main"] = f"Onf(Alt({'|'.join(rule_name for rule_name in rules)}))"
+    return GRS(grs)
+
+
 
 def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
@@ -53,7 +70,7 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, thresh
             (x, p) = anomaly(es, threshold) #the feature edge x has majority
             if x:
                 #build the rule            
-                P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement).without( f"{n1}-[{x}]->{n2}")
+                P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement)
                 R = Rule(P, Commands( Command.add_edge(n1,x,n2)))
                 rn = f"_{p1}_{rule_name}_{p2}_"
                 rules[rn] = R
@@ -191,7 +208,7 @@ def refine_rule(rule_name, R, corpus, n1, n2):
         
 if __name__ == "__main__":
     print_request_counter()
-    corpus = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    corpus = Corpus("examples/resources/pud_10.conllu")
     print_request_counter()
     R0, rule_eval = rank0(corpus)
     print_request_counter()
@@ -205,7 +222,8 @@ if __name__ == "__main__":
     print_request_counter()
     print(len(R0))
     print_request_counter()
-    Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
+    Rs0 = build_grs(R0)
+    print(Rs0)
     
     #corpus1 = Rs0.run(cstart,strat="main")
     corpus1 = Corpus({ sid : Rs0.run(g0s[sid], 'main')[0] for sid in cstart})
