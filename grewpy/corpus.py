@@ -120,7 +120,7 @@ class Corpus:
 
     def get_all(self):
         """
-        :return a dictionary mapping sentence ids to graphs
+        return a dictionary mapping sentence ids to graphs
         """
         dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self._id})
         return {sid: Graph(json_data) for (sid,json_data) in dico.items() }
@@ -129,9 +129,13 @@ class Corpus:
     def search(self, request, clustering_keys=[]):
         """
         Search for [request] into [corpus_index]
-        :param request: a string request
-        :param corpus_index: an integer given by the [corpus] function
-        :return: the list of matching of [request] into the corpus
+
+        Parameters:
+        request (Request): a request
+        corpus_index: an integer given by the [corpus] function
+
+        Returns:
+        list: the list of matching of [request] into the corpus
         """
         return network.send_and_receive({
             "command": "corpus_search",
