@@ -5,7 +5,7 @@ from . import network
 from . import utils
 from .grew import JSON
 from grew.graph import Graph
-from .corpus import Corpus, CorpusDraft
+from .corpus import Corpus, CorpusDraft, GrewError
 
 class ClauseList():
     def __init__(self,sort : str,*L):
@@ -108,10 +108,20 @@ class Command:
         self.s = s
 
     def add_edge(X,e,Y):
-        return Command( (X,e,Y), f"{X}-[{e}]->{Y}")
+        return Command( ("add_edge", X,e,Y), f"add_edge {X}-[{e}]->{Y}")
     
     def __str__(self):
         return self.s
+
+    def json_data(self):
+        return self.s
+
+    def safe(self):
+        if self.t[0] == "add_edge":
+            _,X,e,Y = self.t
+            return f"{X} -[{e}]->{Y}"
+        else:
+            raise Exception("TODO: not yet implemented")
 
 class Commands(list):
     def __init__(self, *L):
@@ -131,6 +141,9 @@ class Commands(list):
     @classmethod
     def from_json(cls, json_data):
         return cls(*json_data)
+    
+    def json_data(self):
+        return [x if isinstance(x,str) else x.json_data() for x in self]
 
 class Rule():
     def __init__(self, request : Request, cmd_list : Commands):
@@ -139,7 +152,8 @@ class Rule():
 
     def json_data(self):
         p = self.request.json_data()
-        return {"request" : p, "commands" : self.commands}
+        c = self.commands.json_data()
+        return {"request" : p, "commands" : c}
 
     def __str__(self):
         return f"{str(self.request)}\n{str(self.commands)}"
@@ -249,8 +263,8 @@ class GRS:
             try:
                 grs = GRSDraft(args)
                 req = {"command": "load_grs", "json": grs.json_data()}
-            except:
-                raise ValueError(f"cannot build a grs with {args}")
+            except GrewError as e:
+                raise ValueError(f"cannot build a grs with {args}\n {e.message}")
         else:
             raise ValueError(f"cannot build a grs with {args}")
     

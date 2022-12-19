@@ -23,20 +23,18 @@ grew.set_config("sud")
 def print_request_counter():
     print(f"Req: {grew.network.request_counter}")
 
-def build_grs(rules):
+def build_grs(rules : dict):
     """
-    rules is a dict of Rules supposed to contain one Command() of type add_edge
-    we add the without Clause to Rules and we add a main strategy
+    rules is a dict of Rules supposed to contain one Command of type add_edge
+    we add the without clause to Rules and we add a main strategy
     """
     grs = dict()
     for rule_name, rule in rules.items():
         cde = rule.commands[0]
         safe_rule = Rule( rule.request.without(cde.safe()), rule.commands)
         grs[rule_name] = safe_rule
-    grs["main"] = f"Onf(Alt({'|'.join(rule_name for rule_name in rules)}))"
+    grs["main"] = f"Onf(Alt({','.join(rule_name for rule_name in rules)}))"
     return GRS(grs)
-
-
 
 def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
@@ -109,11 +107,10 @@ def verify(corpus_test, corpus_gold):
     }
 
 
-def clear_edges(graph):
-    for n in graph:
-        graph.sucs[n] = []
-
 def nofilter(k,v,param):
+    """
+    return True if k=feature,v=feature value can be used for classification
+    """
     if len(v) > param["feat_value_size_limit"] or len(v) == 1:
         return False
     if k in param["skip_features"]:
@@ -217,7 +214,17 @@ def refine_rule(rule_name, R, corpus, n1, n2, param):
             pickle.dump(clf, open("hum.pickle", "wb"))
             x = 0
         """
-        
+
+def corpus_remove_edges(corpus):
+    """
+    create a corpus based on *corpus* whose graph have no edges
+    """
+    c = CorpusDraft(corpus)
+    for sid,g in c.items():
+        for n in g:
+            g.sucs[n] = []
+    return Corpus(c)
+
 if __name__ == "__main__":
     param = {
         "base_threshold": 0.5,
@@ -235,17 +242,14 @@ if __name__ == "__main__":
     R0, rule_eval = rank0(corpus_gold, param)
     # print_request_counter()
 
-    g0s = CorpusDraft(corpus_gold)
-    for sid,g in g0s.items():
-        clear_edges(g)
-    corpus_empty = Corpus(g0s)
 
+    corpus_empty = corpus_remove_edges(corpus_gold)
     # print_request_counter()
     print(verify(corpus_empty, corpus_gold))
     # print_request_counter()
     print(f"len(R0) = {len(R0)}")
     # print_request_counter()
-    Rs0 = GRS(R0 | {'main': f'Onf(Alt({",".join([r for r in R0])}))'})
+    Rs0 = build_grs(R0)
     
     corpus_rank0 = Corpus({ sid : Rs0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
@@ -261,7 +265,7 @@ if __name__ == "__main__":
         if rule_eval[rule_name][1] < param["valid_threshold"]:
             X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
             new_r = refine_rule(rule_name, R, corpus_gold, X, Y, param)
-            if new_r and len(new_r) == 2:
+            if new_r and len(new_r) >= 2:
                 cpt = 1
                 
                 print("--------------------------replace")
@@ -274,18 +278,13 @@ if __name__ == "__main__":
                     
                     new_rules[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
-            elif rule_eval[rule_name][1] > 0.8:
+            elif rule_eval[rule_name][1] > param["valid_threshold"]:
                 new_rules[rule_name] = R
         else:
             new_rules[rule_name] = R
 
-    """
-    print(new_rules)
-    """
     print(f"len(new_rules) = {len(new_rules)}")
-    # print(new_rules)
-
-    Rse = GRS(new_rules | {'main': f'Onf(Alt({",".join([r for r in new_rules])}))'})
+    Rse = build_grs(new_rules)
 
     corpus_rank0_refined = Corpus({sid: Rse.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     print(f"A = {A}")

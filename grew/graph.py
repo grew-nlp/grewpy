@@ -42,7 +42,7 @@ class Graph():
         """
         if data is None:
             self.features = dict()
-            self.sucs = dict()  # ??? initaliser à []
+            self._sucs = dict()  # ??? initaliser à []
             self.meta = dict()
             self.order = []
         elif isinstance(data,str):
@@ -54,7 +54,7 @@ class Graph():
                 pass # TODO load file
         elif isinstance(data, Graph):
             self.features = dict(data.features)
-            self.sucs = dict(data.sucs)
+            self._sucs = dict(data._sucs)
             self.meta = dict(data.meta)
             self.order = list(data.order)
         elif isinstance(data, dict):
@@ -62,24 +62,30 @@ class Graph():
 
     def __of_dict(self,data_json):
         self.features = data_json["nodes"]
-        self.sucs = dict()
+        self._sucs = dict()
         for edge in data_json.get("edges", []):
-            utils.map_append (self.sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
+            utils.map_append (self._sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
         self.meta = data_json.get("meta", dict())
         self.order = data_json.get("order", list())
 
     def __len__(self):
+        """
+        return the number of nodes in self
+        """
         return len(self.features)
 
     def __getitem__(self, nid):
+        """
+        return feature structure corresponding to nid
+        """
         return (self.features[nid])
 
     def __iter__(self):
         return iter(self.features)
 
-    def suc(self, nid):
+    def sucs(self, nid):
         #return self.sucs[nid] if nid in self.sucs else
-        return self.sucs.get(nid, [])
+        return self._sucs.get(nid, [])
 
     def to_dot(self): # TODO fix it
         """
@@ -91,21 +97,21 @@ class Graph():
             label = ["%s:%s" % (f,v.replace('"','\\"')) for f, v in fs.items()]
             s += ",".join(label)
             s += '"];\n'
-        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self.sucs.items() for e,m in suc])
+        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self._sucs.items() for e,m in suc])
         return s + '\n}'
 
     def json_data(self):
         nds = {c:self[c] for c in self.features}
         edg_list = []
-        for n in self.sucs:
-            for (e,s) in self.sucs[n]:
+        for n in self._sucs:
+            for (e,s) in self._sucs[n]:
                 if len(s.keys()) == 1 and '1' in s.keys():
                     s = s["1"]
                 edg_list.append({"src":f"{n}", "label":s,"tar":f"{e}"})
         return {"nodes" : nds, "edges" : edg_list, "order": self.order }
 
     def __str__(self):
-        return f"({str(self.features)}, {str(self.sucs)})" # TODO order, meta
+        return f"({str(self.features)}, {str(self._sucs)})" # TODO order, meta
 
     def to_conll(self):
         """
@@ -117,7 +123,10 @@ class Graph():
         return reply
 
     def triples(self):
-        return set((n, e, s) for n in self.sucs for e,s in self.sucs[n])
+        """
+        return the set of edges presented as: (n,e,s), n-[e]-> s         
+        """
+        return set((n, e, s) for n in self._sucs for e,s in self._sucs[n])
 
     def edge(self, n, s):
         """
