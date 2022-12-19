@@ -1,1 +1,6 @@
 __pycache__
+dist
+_LOCAL
+.DS_Store
+.vscode
+grew.egg-info

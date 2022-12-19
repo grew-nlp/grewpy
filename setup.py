@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name='grew',
     version='1.0.1',
-    packages=['grew',],
+    packages=['grew','examples'],
     license='LICENSE/Licence_CeCILL_V2-en.txt',
     description="A binding to the Grew software",
     long_description=long_description,
