@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../
 
 import grewpy
 from grewpy import Corpus, GRS
-from grewpy import Request, Rule, Commands, Command, GRSDraft, Graph, CorpusDraft
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, Graph, CorpusDraft
 import numpy as np
 
 #type declaration
@@ -19,10 +19,6 @@ Observation = dict[str,dict[str,Count]]
     
 grewpy.set_config("sud")
 
-
-def print_request_counter():
-    print(f"Req: {grewpy.network.request_counter}")
-
 def build_grs(rules : dict):
     """
     rules is a dict of Rules supposed to contain one Command of type add_edge
@@ -31,20 +27,22 @@ def build_grs(rules : dict):
     grs = dict()
     for rule_name, rule in rules.items():
         cde = rule.commands[0]
-        safe_rule = Rule( rule.request.without(cde.safe()), rule.commands)
+        safe_request = Request(rule.request)
+        safe_request.append(cde.safe())
+        safe_rule = Rule(safe_request, rule.commands)
         grs[rule_name] = safe_rule
     grs["main"] = f"Onf(Alt({','.join(rule_name for rule_name in rules)}))"
     return GRS(grs)
 
-def cluster(c : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
+def cluster(corpus : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     search for P within c
     n1 and n2 are nodes within P
     """
     P1 = Request(P, f'e:{n1} -> {n2}')
-    obs = c.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
+    obs = corpus.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
     W1 = Request(f"{n1}[];{n2}[]",P).without(f"{n1} -> {n2}")
-    clus = c.count(W1, [f"{n1}.upos", f"{n2}.upos"])
+    clus = corpus.count(W1, [f"{n1}.upos", f"{n2}.upos"])
     for u1 in obs:
         for u2 in obs[u1]:
             obs[u1][u2][''] = clus.get(u1,dict()).get(u2,0)
@@ -69,7 +67,8 @@ def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, thresh
             if x:
                 #build the rule            
                 P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement)
-                R = Rule(P, Commands( Command.add_edge(n1,x,n2)))
+                c = Add_edge(n1,x,n2)
+                R = Rule(P, Commands( c))
                 rn = f"_{p1}_{rule_name}_{p2}_"
                 rules[rn] = R
                 rule_eval[rn] = (x,p)
@@ -83,29 +82,6 @@ def rank0(corpus : Corpus, param) -> dict[str,Rule]:
     build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, param["base_threshold"])
     build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, param["base_threshold"])
     return rules, rule_eval
-
-def edge_verification(g: Graph, h : Graph) -> np.array : 
-    E1 = g.triples() #set of edges as triples
-    E2 = h.triples()
-    return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
-
-def verify(corpus_test, corpus_gold):
-    """
-    given two corpora, outputs the number of common edges, only left ones and only right ones
-    """
-    (common, left, right) = np.sum([edge_verification(corpus_test[sid],corpus_gold[sid]) for sid in corpus_test], axis=0)
-    precision = common / (common + left)
-    recall = common / (common + right)
-    f_measure = 2*precision*recall / (precision+recall)
-    return { 
-        "common": common, 
-        "left": left, 
-        "right": right, 
-        "precision": round (precision, 3),
-        "recall": round (recall, 3),
-        "f_measure": round(f_measure, 3),
-    }
-
 
 def nofilter(k,v,param):
     """
@@ -122,8 +98,10 @@ def get_tree(X,y,param):
         return None
     if max(y) == 0:
         return None
-    #X_train, X_test, y_train, y_test = train_test_split(X, y)    
-    clf = DecisionTreeClassifier(max_depth=param["max_depth"], max_leaf_nodes=max(y)+1, min_samples_leaf=param["min_samples_leaf"])
+    clf = DecisionTreeClassifier(max_depth=param["max_depth"], 
+                                max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
+                                min_samples_leaf=param["min_samples_leaf"], 
+                                criterion="gini")
     clf.fit(X, y)
     return clf
 
@@ -164,7 +142,7 @@ def create_classifier(matchings, pos, corpus, param):
     return get_tree(X,y,param), {y1[i] : i for i in y1}
 
 
-def find_classes(clf):
+def find_classes(clf, param):
     def branches(pos, tree, current, acc, threshold):
         if tree.feature[pos] >= 0:
             #there is a feature
@@ -181,7 +159,7 @@ def find_classes(clf):
                 acc[pos] = current
     tree = clf.tree_
     bs = dict()
-    branches(0, tree, tuple(), bs, 0.01)
+    branches(0, tree, tuple(), bs, param["node_impurity"])
     return bs
 
 def refine_rule(rule_name, R, corpus, n1, n2, param):
@@ -190,20 +168,19 @@ def refine_rule(rule_name, R, corpus, n1, n2, param):
     pos, fpat = fvs(matchings, corpus, param)
     clf, y1 = create_classifier(matchings, pos, corpus, param)
     if clf:
-        branches = find_classes(clf)
+        branches = find_classes(clf, param)
         for node in branches:
             branch=branches[node]
-            r = R.request.pattern()
+            request = Request(R.request)
             for i in range(0, len(branch), 2):
                 n, feat, feat_value = fpat[branch[i]]
                 if branch[i+1]:
-                    r = r.without(f'{n}[{feat}="{feat_value}"]')
+                    request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
-                    r.append("pattern",f'{n}[{feat}="{feat_value}"]')
+                    request.append("pattern",f'{n}[{feat}="{feat_value}"]')
             e = y1[ clf.tree_.value[node].argmax()]
             if e:
-                r = r.without(f"{n1} -[{e}]-> {n2}")
-                rule = Rule(r, Commands(f"add_edge {n1}-[{e}]-> {n2}"))
+                rule = Rule(request, Commands(Add_edge(n1,e,n2)))
                 res.append(rule)
     return res
     """
@@ -217,31 +194,33 @@ def refine_rule(rule_name, R, corpus, n1, n2, param):
 
 def corpus_remove_edges(corpus):
     """
-    create a corpus based on *corpus* whose graph have no edges
+    create a corpus based on *corpus* whose graphs have no edges
     """
-    c = CorpusDraft(corpus)
-    for sid,g in c.items():
+    def clear_edges(g):
         for n in g:
             g.sucs[n] = []
-    return Corpus(c)
+        return g
+    return Corpus(CorpusDraft(corpus).map(clear_edges))
 
 if __name__ == "__main__":
     param = {
         "base_threshold": 0.5,
-        "valid_threshold": 0.9,
+        "valid_threshold": 0.95,
         "max_depth": 3,
         "min_samples_leaf": 5,
         "max_leaf_node": 5,  # unused see DecisionTreeClassifier.max_leaf_node
         "feat_value_size_limit": 10,
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
+        "node_impurity" : 0.001,
+        "number_of_extra_leaves" : 2
     }
-    # corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
-    corpus_gold = Corpus("examples/resources/pud_10.conllu")
+    corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    #corpus_gold = Corpus("examples/resources/pud_10.conllu")
     R0, rule_eval = rank0(corpus_gold, param)
 
 
     corpus_empty = corpus_remove_edges(corpus_gold)
-    print(verify(corpus_empty, corpus_gold))
+    print(corpus_empty.diff(corpus_gold))
     print(f"len(R0) = {len(R0)}")
     Rs0 = build_grs(R0)
     
@@ -249,7 +228,7 @@ if __name__ == "__main__":
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
     print(f"A = {A}")
-    print(verify(corpus_rank0, corpus_gold))
+    print(corpus_rank0.diff(corpus_gold))
 
     print(f"len(R0) = {len(R0)}")
     new_rules = dict()
@@ -278,4 +257,4 @@ if __name__ == "__main__":
 
     corpus_rank0_refined = Corpus({sid: Rse.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     print(f"A = {A}")
-    print(verify(corpus_rank0_refined, corpus_gold))
+    print(corpus_rank0_refined.diff(corpus_gold))

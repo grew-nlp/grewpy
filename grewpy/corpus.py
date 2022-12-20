@@ -8,6 +8,7 @@ import sys
 import tempfile
 import json
 import typing
+import numpy as np
 
 from .network import send_and_receive
 from .graph import Graph
@@ -48,6 +49,13 @@ class CorpusDraft(dict):
 
     def __iter__(self):
         return iter(self._sent_ids)
+
+    def map(self, fun):
+        """
+        Apply fun to all graphs, return the new Corpus
+        """
+        return CorpusDraft({sid : fun(self[sid]) for sid in self})
+
 
 
 class Corpus:
@@ -157,6 +165,23 @@ class Corpus:
             "request": request.json_data(),
             "clustering_keys": clustering_keys,
         })
+
+    def diff(self, corpus_gold):
+        """
+        given two corpora, outputs the number of common edges, only left ones and only right ones
+        """
+        (common, left, right) = np.sum([self[sid].diff(corpus_gold[sid]) for sid in self], axis=0)
+        precision = common / (common + left)
+        recall = common / (common + right)
+        f_measure = 2*precision*recall / (precision+recall)
+        return {
+        "common": common,
+        "left": left,
+        "right": right,
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "f_measure": round(f_measure, 3),
+    }
 
     def __len__(self):
         return self._length

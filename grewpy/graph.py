@@ -6,6 +6,7 @@ import re
 import copy
 import tempfile
 import json
+import numpy as np
 
 from grewpy.grew import GrewError
 from grewpy.network import send_and_receive
@@ -147,3 +148,8 @@ class Graph():
 
     def apply(self, Grs, strat="main"):
         Grs.apply(self, strat)
+
+    def diff(self, other) -> np.array:
+        E1 = self.triples()  # set of edges as triples
+        E2 = other.triples()
+        return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])

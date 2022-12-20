@@ -94,34 +94,55 @@ class Request():
         """
         return Request(p for p in self.items if p.sort == "pattern")
 
-    def append(self, sorte, clause):
-        self.items = self.items + (ClauseList(sorte, clause),)
+    def append(self, *L):
+        """
+        Append a new ClauseList to the Request
+        L is given either as a pair (s,t) with "s \in {'pattern','without','meta'} and t : str 
+        or L[0] is a ClauseList 
+        """
+        if len(L) == 2:
+            self.items = self.items + (ClauseList(L[0], L[1]),)
+        elif len(L) == 1:
+            self.items = self.items + L
+        else:
+            raise ValueError(f"cannot build a clause list with {L}")
 
 
 class Command:
-    def __init__(self,t,s):
+    def __init__(self,s):
         """
-        self.t = data associated to the command
-        self.s = str representation of the command
+        self.item = str representation of the command
         """
-        self.t = t
-        self.s = s
-
-    def add_edge(X,e,Y):
-        return Command( ("add_edge", X,e,Y), f"add_edge {X}-[{e}]->{Y}")
-    
-    def __str__(self):
-        return self.s
+        self.item = s
 
     def json_data(self):
-        return self.s
+        return self.item
+    
+    def __str__(self):
+        return self.item
 
     def safe(self):
-        if self.t[0] == "add_edge":
-            _,X,e,Y = self.t
-            return f"{X} -[{e}]->{Y}"
-        else:
-            raise Exception("TODO: not yet implemented")
+        """
+        return a clause list for a safe request
+        """
+        raise NotImplementedError ("not yet implemented")
+
+class Add_edge(Command):
+    def __init__(self,X,e,Y):
+        super().__init__(f"add_edge {X}-[{e}]->{Y}")
+        self.X, self.e, self.Y = X, e, Y
+
+    def safe(self):           
+        return ClauseList("without",f"{self.X} -[{self.e}]->{self.Y}")
+
+class Delete_edge(Command):
+    def __init__(self, X, e, Y):
+        super().__init__(f"del_edge {X}-[{e}]->{Y}")
+        self.X, self.e, self.Y = X, e, Y
+
+    def safe(self):           
+        return ClauseList("pattern", f"{self.X} -[{self.e}]->{self.Y}")
+
 
 class Commands(list):
     def __init__(self, *L):
@@ -146,14 +167,15 @@ class Commands(list):
         return [x if isinstance(x,str) else x.json_data() for x in self]
 
 class Rule():
-    def __init__(self, request : Request, cmd_list : Commands):
+    def __init__(self, request : Request, cmd_list : Commands, lexicons =None):
         self.request = request
         self.commands = cmd_list
+        self.lexicons = lexicons if lexicons else dict()
 
     def json_data(self):
         p = self.request.json_data()
         c = self.commands.json_data()
-        return {"request" : p, "commands" : c}
+        return {"request" : p, "commands" : c, "lexicons" : json.dumps(self.lexicons)}
 
     def __str__(self):
         return f"{str(self.request)}\n{str(self.commands)}"

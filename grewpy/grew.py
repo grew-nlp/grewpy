@@ -4,6 +4,7 @@ Graphs are represented by dictionaries (nodes, edges, meta informations)
 GRS can be build via files, explicit constructions or even strings. See doc of GREW
 """
 import typing
+import json
 
 from . import network
 
