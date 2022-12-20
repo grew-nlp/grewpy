@@ -1,15 +1,12 @@
 import matplotlib.pyplot as plt
 from sklearn import tree
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.model_selection import train_test_split
 import sys, os
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
-import grewpy
-from grewpy import Corpus, GRS
+from grewpy import Corpus, GRS, set_config
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, Graph, CorpusDraft
-import numpy as np
 
 #type declaration
 Count = dict[str,int]
@@ -17,8 +14,6 @@ Observation = dict[str,dict[str,Count]]
 #Observation is a dict mapping'VERB' to a dict mapping 'NOUN' to {'' : 10, 'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 #'' meaning no relationships
     
-grewpy.set_config("sud")
-
 def cluster(corpus : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     search for P within c
@@ -40,30 +35,30 @@ def anomaly(obs : Count, threshold : float):
             return x, obs[x]/s
     return None, None
 
-def build_rules(requirement, rules, corpus, n1, n2, rule_name, rule_eval, threshold):
+def build_rules(base_pattern, rules : GRSDraft, corpus, n1, n2, rule_name, rule_eval, threshold):
     """
-    build rules corresponding to request requirement with help of corpus
+    build rules corresponding to request base_pattern with help of corpus
     n1, n2 two nodes on which we do a cluster
     """
-    obslr = cluster(corpus, requirement, n1, n2)
+    obslr = cluster(corpus, base_pattern, n1, n2)
     for p1, v in obslr.items():
         for p2, es in v.items():
             (x, p) = anomaly(es, threshold) #the feature edge x has majority
             if x:
                 #build the rule            
-                P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", requirement)
+                P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", base_pattern)
                 c = Add_edge(n1,x,n2)
                 R = Rule(P, Commands( c))
                 rn = f"_{p1}_{rule_name}_{p2}_"
                 rules[rn] = R
                 rule_eval[rn] = (x,p)
 
-def rank0(corpus : Corpus, param) -> dict[str,Rule]:
+def rank0(corpus : Corpus, param) -> GRSDraft:
     """
-    builds all rank 0 rules
+    build all rank 0 rules
     """
     rules = GRSDraft()
-    rule_eval = dict()
+    rule_eval = dict() #eval of the rule, same keys as rules
     build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, param["base_threshold"])
     build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, param["base_threshold"])
     return rules, rule_eval
@@ -108,7 +103,7 @@ def fvs(matchings, corpus, param):
     return {features[i]: i for i in range(len(features))}, features
 
 def create_classifier(matchings, pos, corpus, param):
-    X, y1,y = [], dict(), list()
+    X, y1,y = list(), dict(), list()
     for m in matchings:
         graph = corpus[m["sent_id"]]
         nodes = m['matching']['nodes']
@@ -188,6 +183,7 @@ def corpus_remove_edges(corpus):
     return Corpus(CorpusDraft(corpus).map(clear_edges))
 
 if __name__ == "__main__":
+    set_config("sud")
     param = {
         "base_threshold": 0.5,
         "valid_threshold": 0.95,
@@ -203,16 +199,13 @@ if __name__ == "__main__":
     #corpus_gold = Corpus("examples/resources/pud_10.conllu")
     R0, rule_eval = rank0(corpus_gold, param)
 
-
     corpus_empty = corpus_remove_edges(corpus_gold)
     print(corpus_empty.diff(corpus_gold))
     print(f"len(R0) = {len(R0)}")
     R0.safe_rules()
     R0.onf() #add strategy Onf(Alt(rules))
     GR0 = GRS(R0)
-
-
-    
+  
     corpus_rank0 = Corpus({ sid : GR0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
@@ -220,30 +213,28 @@ if __name__ == "__main__":
     print(corpus_rank0.diff(corpus_gold))
 
     print(f"len(R0) = {len(R0)}")
-    new_rules = dict()
+    R0e = GRSDraft()
     for rule_name in R0.rules():
         R = R0[rule_name]
         if rule_eval[rule_name][1] < param["valid_threshold"]:
             X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
             new_r = refine_rule(rule_name, R, corpus_gold, X, Y, param)
-            if new_r and len(new_r) >= 2:
+            if len(new_r) >= 1:
                 cpt = 1
                 
                 print("--------------------------replace")
                 print(R)
                 
-                for r in new_r:
-                    
+                for r in new_r:                    
                     print("by : ")
                     print(r)
                     
-                    new_rules[f"{rule_name}_enhanced{cpt}"] = r
+                    R0e[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
         else:
-            new_rules[rule_name] = R
+            R0e[rule_name] = R
 
-    print(f"len(new_rules) = {len(new_rules)}")
-    R0e = GRSDraft(new_rules)
+    print(f"len(new_rules) = {len(R0e)}")
     R0e.safe_rules()
     R0e.onf()
     GR0e = GRS(R0e)
