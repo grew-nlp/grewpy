@@ -19,21 +19,6 @@ Observation = dict[str,dict[str,Count]]
     
 grewpy.set_config("sud")
 
-def build_grs(rules : dict):
-    """
-    rules is a dict of Rules supposed to contain one Command of type add_edge
-    we add the without clause to Rules and we add a main strategy
-    """
-    grs = dict()
-    for rule_name, rule in rules.items():
-        cde = rule.commands[0]
-        safe_request = Request(rule.request)
-        safe_request.append(cde.safe())
-        safe_rule = Rule(safe_request, rule.commands)
-        grs[rule_name] = safe_rule
-    grs["main"] = f"Onf(Alt({','.join(rule_name for rule_name in rules)}))"
-    return GRS(grs)
-
 def cluster(corpus : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
     """
     search for P within c
@@ -77,7 +62,7 @@ def rank0(corpus : Corpus, param) -> dict[str,Rule]:
     """
     builds all rank 0 rules
     """
-    rules = dict()
+    rules = GRSDraft()
     rule_eval = dict()
     build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, param["base_threshold"])
     build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, param["base_threshold"])
@@ -222,9 +207,13 @@ if __name__ == "__main__":
     corpus_empty = corpus_remove_edges(corpus_gold)
     print(corpus_empty.diff(corpus_gold))
     print(f"len(R0) = {len(R0)}")
-    Rs0 = build_grs(R0)
+    R0.safe_rules()
+    R0.onf() #add strategy Onf(Alt(rules))
+    GR0 = GRS(R0)
+
+
     
-    corpus_rank0 = Corpus({ sid : Rs0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    corpus_rank0 = Corpus({ sid : GR0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
     print(f"A = {A}")
@@ -232,7 +221,8 @@ if __name__ == "__main__":
 
     print(f"len(R0) = {len(R0)}")
     new_rules = dict()
-    for rule_name, R in R0.items():
+    for rule_name in R0.rules():
+        R = R0[rule_name]
         if rule_eval[rule_name][1] < param["valid_threshold"]:
             X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
             new_r = refine_rule(rule_name, R, corpus_gold, X, Y, param)
@@ -253,8 +243,11 @@ if __name__ == "__main__":
             new_rules[rule_name] = R
 
     print(f"len(new_rules) = {len(new_rules)}")
-    Rse = build_grs(new_rules)
+    R0e = GRSDraft(new_rules)
+    R0e.safe_rules()
+    R0e.onf()
+    GR0e = GRS(R0e)
 
-    corpus_rank0_refined = Corpus({sid: Rse.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    corpus_rank0_refined = Corpus({sid: GR0e.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     print(f"A = {A}")
     print(corpus_rank0_refined.diff(corpus_gold))

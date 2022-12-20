@@ -239,7 +239,7 @@ class GRSDraft(Package):
     It cannot be used to perform rewriting, for that, use a GRS
     """
 
-    def __init__(self,args):
+    def __init__(self,args=None):
         """Load a grs stored in a file
         :param data: either a file name or a Grew string representation of a grs
         :or kwargs contains explicitly the parts of the grs
@@ -253,10 +253,32 @@ class GRSDraft(Package):
             super().__init__(res)
         elif isinstance(args, dict):
             super().__init__( args )
+        elif args == None:
+            super().__init__()
 
     def __str__(self):
         return super().__str__()
 
+    def rules(self):
+        return (rule_name for rule_name in self if isinstance(self[rule_name],Rule))
+
+    def safe_rules(self):
+        """
+        apply safe to each rule. 
+        self.rules() are supposed to contain only Commands of length 1 that support safe method
+        """
+        for rule_name in self.rules():
+            rule = self[rule_name]
+            cde = rule.commands[0]
+            safe_request = Request(rule.request)
+            safe_request.append(cde.safe())
+            safe_rule = Rule(safe_request, rule.commands, rule.lexicons)
+            self[rule_name] = safe_rule
+
+    def onf(self, strat_name="main"):
+        self[strat_name] = f'Onf(Alt({",".join(self)}))'
+
+        
 class GRS:
     """
     An abstract GRS. Offers the possibility to apply rewriting.
