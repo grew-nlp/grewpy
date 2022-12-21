@@ -7,7 +7,7 @@ from .grew import JSON
 from grewpy.graph import Graph
 from .corpus import Corpus, CorpusDraft, GrewError
 
-class ClauseList():
+class RequestItem():
     def __init__(self,sort : str,*L):
         """
         sort in {"without", "pattern", "global"}
@@ -47,15 +47,15 @@ class Request():
     def __init__(self, *L):
         """
         L is either a list of
-         - ClauseList or
+         - RequestItem or
          - (pattern) string or a
          - Request (for copies)
         """
         elts = tuple()
         for e in L:
             if isinstance(e,str):
-                elts += (ClauseList("pattern", e),)
-            elif isinstance(e,ClauseList):
+                elts += (RequestItem("pattern", e),)
+            elif isinstance(e,RequestItem):
                 elts += (e,)
             elif isinstance(e,Request):
                 elts += e.items
@@ -71,12 +71,12 @@ class Request():
         self.items = elts
 
     def without(self, *L):
-        self.items += tuple(ClauseList("without", e) for e in L)
+        self.items += tuple(RequestItem("without", e) for e in L)
         return self
 
     @classmethod
     def from_json(cls,json_data):
-        elts = [ClauseList.from_json(c) for c in json_data]
+        elts = [RequestItem.from_json(c) for c in json_data]
         return cls(*elts)
 
     def json_data(self):
@@ -101,7 +101,7 @@ class Request():
         or L[0] is a ClauseList 
         """
         if len(L) == 2:
-            self.items = self.items + (ClauseList(L[0], L[1]),)
+            self.items = self.items + (RequestItem(L[0], L[1]),)
         elif len(L) == 1:
             self.items = self.items + L
         else:
@@ -133,7 +133,7 @@ class Add_edge(Command):
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):           
-        return ClauseList("without",f"{self.X} -[{self.e}]->{self.Y}")
+        return RequestItem("without",f"{self.X} -[{self.e}]->{self.Y}")
 
 class Delete_edge(Command):
     def __init__(self, X, e, Y):
@@ -141,7 +141,7 @@ class Delete_edge(Command):
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):           
-        return ClauseList("pattern", f"{self.X} -[{self.e}]->{self.Y}")
+        return RequestItem("pattern", f"{self.X} -[{self.e}]->{self.Y}")
 
 
 class Commands(list):
@@ -264,19 +264,22 @@ class GRSDraft(Package):
 
     def safe_rules(self):
         """
-        apply safe to each rule. 
+        create a new grs with application of safe to each rule. 
         self.rules() are supposed to contain only Commands of length 1 that support safe method
         """
+        grs = GRSDraft()
         for rule_name in self.rules():
             rule = self[rule_name]
             cde = rule.commands[0]
             safe_request = Request(rule.request)
             safe_request.append(cde.safe())
             safe_rule = Rule(safe_request, rule.commands, rule.lexicons)
-            self[rule_name] = safe_rule
+            grs[rule_name] = safe_rule
+        return grs
 
     def onf(self, strat_name="main"):
-        self[strat_name] = f'Onf(Alt({",".join(self)}))'
+        self[strat_name] = f'Onf(Alt({",".join(self.rules())}))'
+        return self
 
         
 class GRS:

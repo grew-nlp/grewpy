@@ -6,7 +6,7 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
 from grewpy import Corpus, GRS, set_config
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, Graph, CorpusDraft
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
 
 #type declaration
 Count = dict[str,int]
@@ -14,40 +14,39 @@ Observation = dict[str,dict[str,Count]]
 #Observation is a dict mapping'VERB' to a dict mapping 'NOUN' to {'' : 10, 'xcomp': 7, 'obj': 36, 'nsubj': 4 ....}
 #'' meaning no relationships
     
-def cluster(corpus : Corpus, P : Request, n1 : str,n2 : str) -> Observation:
+def cluster(corpus : Corpus, P : Request) -> Observation:
     """
-    search for P within c
-    n1 and n2 are nodes within P
+    search for a link X -> Y with respect to pattern P in the corpus
     """
-    P1 = Request(P, f'e:{n1} -> {n2}')
-    obs = corpus.count(P1, [f"{n1}.upos", f"{n2}.upos", "e.label"])
-    W1 = Request(f"{n1}[];{n2}[]",P).without(f"{n1} -> {n2}")
-    clus = corpus.count(W1, [f"{n1}.upos", f"{n2}.upos"])
+    P1 = Request(P, f'e:X-> Y')
+    obs = corpus.count(P1, [f"X.upos", f"Y.upos", "e.label"])
+    W1 = Request(P).without(f"X -> Y")
+    clus = corpus.count(W1, [f"X.upos", f"Y.upos"])
     for u1 in obs:
         for u2 in obs[u1]:
             obs[u1][u2][''] = clus.get(u1,dict()).get(u2,0)
     return obs
 
-def anomaly(obs : Count, threshold : float):
+def anomaly(obs : Count, param):
     s = sum(obs.values()) 
     for x in obs:
-        if obs[x] > threshold * s and x:
+        if obs[x] > param["base_threshold"] * s and x:
             return x, obs[x]/s
     return None, None
 
-def build_rules(base_pattern, rules : GRSDraft, corpus, n1, n2, rule_name, rule_eval, threshold):
+def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule_eval, param):
     """
-    build rules corresponding to request base_pattern with help of corpus
-    n1, n2 two nodes on which we do a cluster
+    search a rule adding an edge X -> Y
+    the rule takes into account the base pattern (that contains extra constraints)
     """
-    obslr = cluster(corpus, base_pattern, n1, n2)
+    obslr = cluster(corpus, base_pattern)
     for p1, v in obslr.items():
         for p2, es in v.items():
-            (x, p) = anomaly(es, threshold) #the feature edge x has majority
+            (x, p) = anomaly(es, param) #the feature edge x has majority
             if x:
                 #build the rule            
-                P = Request(f"{n1}[upos={p1}]; {n2}[upos={p2}]", base_pattern)
-                c = Add_edge(n1,x,n2)
+                P = Request(f"X[upos={p1}]; Y[upos={p2}]", base_pattern)
+                c = Add_edge("X",x,"Y")
                 R = Rule(P, Commands( c))
                 rn = f"_{p1}_{rule_name}_{p2}_"
                 rules[rn] = R
@@ -59,8 +58,8 @@ def rank0(corpus : Corpus, param) -> GRSDraft:
     """
     rules = GRSDraft()
     rule_eval = dict() #eval of the rule, same keys as rules
-    build_rules("X<Y", rules, corpus, "X", "Y", "lr", rule_eval, param["base_threshold"])
-    build_rules("Y<X", rules, corpus, "X", "Y", "rl", rule_eval, param["base_threshold"])
+    build_rules("X[];Y[];X<Y", rules, corpus, "lr", rule_eval, param)
+    build_rules("X[];Y[];Y<X", rules, corpus, "rl", rule_eval, param)
     return rules, rule_eval
 
 def nofilter(k,v,param):
@@ -103,8 +102,17 @@ def fvs(matchings, corpus, param):
     return {features[i]: i for i in range(len(features))}, features
 
 def create_classifier(matchings, pos, corpus, param):
+    """
+    builds a decision tree classifier
+    matchings: the matching on the two nodes X, Y
+    we compute the class mapping (feature values of X, feature values of Y) to the edge between X and Y
+    pos: maps a triple (node=X or Y, feature=Gen, feature_value=Fem) to a column number
+    corpus serves to get back graphs
+    param contains hyperparameter
+    """
     X, y1,y = list(), dict(), list()
     for m in matchings:
+        #each matching will lead to an obs which is a list of 0/1 values 
         graph = corpus[m["sent_id"]]
         nodes = m['matching']['nodes']
         obs = [0]*len(pos)
@@ -142,7 +150,7 @@ def find_classes(clf, param):
     branches(0, tree, tuple(), bs, param["node_impurity"])
     return bs
 
-def refine_rule(rule_name, R, corpus, n1, n2, param):
+def refine_rule(R, corpus, param):
     res = []
     matchings = corpus.search(R.request.pattern())
     pos, fpat = fvs(matchings, corpus, param)
@@ -160,7 +168,7 @@ def refine_rule(rule_name, R, corpus, n1, n2, param):
                     request.append("pattern",f'{n}[{feat}="{feat_value}"]')
             e = y1[ clf.tree_.value[node].argmax()]
             if e:
-                rule = Rule(request, Commands(Add_edge(n1,e,n2)))
+                rule = Rule(request, Commands(Add_edge("X",e,"Y")))
                 res.append(rule)
     return res
     """
@@ -185,15 +193,15 @@ def corpus_remove_edges(corpus):
 if __name__ == "__main__":
     set_config("sud")
     param = {
-        "base_threshold": 0.5,
-        "valid_threshold": 0.95,
+        "base_threshold": 0.25,
+        "valid_threshold": 0.90,
         "max_depth": 3,
         "min_samples_leaf": 5,
         "max_leaf_node": 5,  # unused see DecisionTreeClassifier.max_leaf_node
         "feat_value_size_limit": 10,
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
-        "node_impurity" : 0.001,
-        "number_of_extra_leaves" : 2
+        "node_impurity" : 0.01,
+        "number_of_extra_leaves" : 3
     }
     corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
     #corpus_gold = Corpus("examples/resources/pud_10.conllu")
@@ -202,11 +210,9 @@ if __name__ == "__main__":
     corpus_empty = corpus_remove_edges(corpus_gold)
     print(corpus_empty.diff(corpus_gold))
     print(f"len(R0) = {len(R0)}")
-    R0.safe_rules()
-    R0.onf() #add strategy Onf(Alt(rules))
-    GR0 = GRS(R0)
+    R0_test = GRS(R0.safe_rules().onf())
   
-    corpus_rank0 = Corpus({ sid : GR0.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    corpus_rank0 = Corpus({ sid : R0_test.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
     print(f"A = {A}")
@@ -217,8 +223,7 @@ if __name__ == "__main__":
     for rule_name in R0.rules():
         R = R0[rule_name]
         if rule_eval[rule_name][1] < param["valid_threshold"]:
-            X,Y = ("X","Y") if "lr" in rule_name else ("Y","X")
-            new_r = refine_rule(rule_name, R, corpus_gold, X, Y, param)
+            new_r = refine_rule(R, corpus_gold, param)
             if len(new_r) >= 1:
                 cpt = 1
                 
@@ -235,10 +240,8 @@ if __name__ == "__main__":
             R0e[rule_name] = R
 
     print(f"len(new_rules) = {len(R0e)}")
-    R0e.safe_rules()
-    R0e.onf()
-    GR0e = GRS(R0e)
+    R0e_test = GRS(R0e.safe_rules().onf())
 
-    corpus_rank0_refined = Corpus({sid: GR0e.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
+    corpus_rank0_refined = Corpus({sid: R0e_test.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     print(f"A = {A}")
     print(corpus_rank0_refined.diff(corpus_gold))
