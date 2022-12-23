@@ -2,7 +2,6 @@ import json
 import os.path
 
 from . import network
-from . import utils
 from .grew import JSON
 from grewpy.graph import Graph
 from .corpus import Corpus, CorpusDraft, GrewError

@@ -17,6 +17,7 @@ Observation = dict[str,dict[str,Count]]
 def cluster(corpus : Corpus, P : Request) -> Observation:
     """
     search for a link X -> Y with respect to pattern P in the corpus
+    we build a cluster depending on X.upos and Y.upos
     """
     P1 = Request(P, f'e:X-> Y')
     obs = corpus.count(P1, [f"X.upos", f"Y.upos", "e.label"])
@@ -28,6 +29,9 @@ def cluster(corpus : Corpus, P : Request) -> Observation:
     return obs
 
 def anomaly(obs : Count, param):
+    """
+    return an observation and its probability if beyond base_threshold
+    """
     s = sum(obs.values()) 
     for x in obs:
         if obs[x] > param["base_threshold"] * s and x:
@@ -36,8 +40,12 @@ def anomaly(obs : Count, param):
 
 def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule_eval, param):
     """
-    search a rule adding an edge X -> Y
-    the rule takes into account the base pattern (that contains extra constraints)
+    search a rule adding an edge X -> Y, given a base_pattern  
+    we build the clusters, then
+    for each pair (X, upos=U1), (Y, upos=U2), we search for 
+    some edge e occuring at least with probability base_threshold
+    in which case, we define a rule R: 
+    base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
     """
     obslr = cluster(corpus, base_pattern)
     for p1, v in obslr.items():
@@ -54,7 +62,7 @@ def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule
 
 def rank0(corpus : Corpus, param) -> GRSDraft:
     """
-    build all rank 0 rules
+    build all rank 0 rules. They are supposed to connect words at distance 1
     """
     rules = GRSDraft()
     rule_eval = dict() #eval of the rule, same keys as rules
@@ -64,6 +72,7 @@ def rank0(corpus : Corpus, param) -> GRSDraft:
 
 def nofilter(k,v,param):
     """
+    avoid to use meaningless features/feature values
     return True if k=feature,v=feature value can be used for classification
     """
     if len(v) > param["feat_value_size_limit"] or len(v) == 1:
@@ -73,6 +82,10 @@ def nofilter(k,v,param):
     return True
 
 def get_tree(X,y,param):
+    """
+    build a decision tree based on observation X,y
+    given hyperparameter within param
+    """
     if not X or not len(X[0]):
         return None
     if max(y) == 0:
@@ -86,7 +99,8 @@ def get_tree(X,y,param):
 
 def fvs(matchings, corpus, param):
     """
-    return the set of (feature,values) of nodes X and Y in the matchings
+    return the set of (Z,feature,values) of nodes Z=X, Y in the matchings
+    within the corpus. param serves to filter meaningful features values
     """
     features = {'X' : dict(), 'Y':dict()}
     for m in matchings:
@@ -99,7 +113,7 @@ def fvs(matchings, corpus, param):
                     features[n][k] = set()
                 features[n][k].add(v)
     features = [(n,k,fv) for n in features for k,v in features[n].items() if nofilter(k,v,param) for fv in v]
-    return {features[i]: i for i in range(len(features))}, features
+    return features
 
 def create_classifier(matchings, pos, corpus, param):
     """
@@ -111,6 +125,10 @@ def create_classifier(matchings, pos, corpus, param):
     param contains hyperparameter
     """
     X, y1,y = list(), dict(), list()
+    #X: set of input values, as a list of (0,1)
+    #y: set of output values, an index associated to the edge e
+    #the absence of an edge has its own index
+    #y1: the mapping between an edge e to some index
     for m in matchings:
         #each matching will lead to an obs which is a list of 0/1 values 
         graph = corpus[m["sent_id"]]
@@ -131,46 +149,61 @@ def create_classifier(matchings, pos, corpus, param):
 
 
 def find_classes(clf, param):
+    """
+    given a decision tree, extract "interesting" branches
+    the output is a dict mapping the node_index to its branch
+    a branch is the list of intermediate constraints = (7,1,8,0,...)
+    that is feature value 7 has without clause whereas feature 8 is positive 
+    """
     def branches(pos, tree, current, acc, threshold):
         if tree.feature[pos] >= 0:
+            if tree.impurity[pos] < threshold:
+                acc[pos] = current
+                return
             #there is a feature
             if tree.children_left[pos] >= 0:
                 #there is a child
-                left = current + ((tree.feature[pos],1))
+                left = current + ((tree.feature[pos],1),)
                 branches(tree.children_left[pos], tree, left, acc, threshold)
             if tree.children_right[pos] >= 0:
-                right = current + ((tree.feature[pos], 0))
+                right = current + ((tree.feature[pos], 0),)
                 branches(tree.children_right[pos], tree, right, acc, threshold)
             return 
         else:
             if tree.impurity[pos] < threshold:
                 acc[pos] = current
     tree = clf.tree_
-    bs = dict()
-    branches(0, tree, tuple(), bs, param["node_impurity"])
-    return bs
+    acc = dict()
+    branches(0, tree, tuple(), acc, param["node_impurity"])
+    return acc
 
 def refine_rule(R, corpus, param):
+    """
+    takes a rule R, tries to find variants
+    the result is the list of rules that should replace R
+    for DEBUG, we return the decision tree classifier
+    """
     res = []
-    matchings = corpus.search(R.request.pattern())
-    pos, fpat = fvs(matchings, corpus, param)
+    matchings = corpus.search(R.request)
+    fpat = fvs(matchings, corpus, param) #the list of all feature values 
+    pos = {fpat[i]: i for i in range(len(fpat))}
     clf, y1 = create_classifier(matchings, pos, corpus, param)
     if clf:
-        branches = find_classes(clf, param)
+        branches = find_classes(clf, param) #extract interesting branches
         for node in branches:
             branch=branches[node]
-            request = Request(R.request)
-            for i in range(0, len(branch), 2):
-                n, feat, feat_value = fpat[branch[i]]
-                if branch[i+1]:
+            request = Request(R.request) #builds a new Request
+            for feature_index, negative in branch:
+                n, feat, feat_value = fpat[feature_index]
+                if negative:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
                     request.append("pattern",f'{n}[{feat}="{feat_value}"]')
             e = y1[ clf.tree_.value[node].argmax()]
-            if e:
+            if e: #here, e == None if there is no edges X -> Y
                 rule = Rule(request, Commands(Add_edge("X",e,"Y")))
                 res.append(rule)
-    return res
+    return res, clf
     """
     import pickle
         tree.plot_tree(clf)
@@ -179,6 +212,31 @@ def refine_rule(R, corpus, param):
             pickle.dump(clf, open("hum.pickle", "wb"))
             x = 0
         """
+
+def refine_rules(Rs, corpus, param):
+    """
+    as above, but applies on a list of rules
+    return the list of refined version of rules Rs
+    """
+    Rse = GRSDraft()
+    for rule_name in Rs.rules():
+        R = Rs[rule_name]
+        if rule_eval[rule_name][1] < param["valid_threshold"]:
+            new_r, clf = refine_rule(R, corpus, param)
+            if len(new_r) >= 1:
+                cpt = 1
+                print("--------------------------replace")
+                print(R)
+                for r in new_r:
+                    print("by : ")
+                    print(r)
+                    Rse[f"{rule_name}_enhanced{cpt}"] = r
+                    cpt += 1
+
+        else:
+            Rse[rule_name] = R
+    return Rse
+
 
 def corpus_remove_edges(corpus):
     """
@@ -200,7 +258,7 @@ if __name__ == "__main__":
         "max_leaf_node": 5,  # unused see DecisionTreeClassifier.max_leaf_node
         "feat_value_size_limit": 10,
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
-        "node_impurity" : 0.01,
+        "node_impurity" : 0.1,
         "number_of_extra_leaves" : 3
     }
     corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
@@ -210,7 +268,7 @@ if __name__ == "__main__":
     corpus_empty = corpus_remove_edges(corpus_gold)
     print(corpus_empty.diff(corpus_gold))
     print(f"len(R0) = {len(R0)}")
-    R0_test = GRS(R0.safe_rules().onf())
+    R0_test = GRS(R0.safe_rules().onf()) 
   
     corpus_rank0 = Corpus({ sid : R0_test.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
     A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
@@ -219,25 +277,7 @@ if __name__ == "__main__":
     print(corpus_rank0.diff(corpus_gold))
 
     print(f"len(R0) = {len(R0)}")
-    R0e = GRSDraft()
-    for rule_name in R0.rules():
-        R = R0[rule_name]
-        if rule_eval[rule_name][1] < param["valid_threshold"]:
-            new_r = refine_rule(R, corpus_gold, param)
-            if len(new_r) >= 1:
-                cpt = 1
-                
-                print("--------------------------replace")
-                print(R)
-                
-                for r in new_r:                    
-                    print("by : ")
-                    print(r)
-                    
-                    R0e[f"{rule_name}_enhanced{cpt}"] = r
-                    cpt += 1
-        else:
-            R0e[rule_name] = R
+    R0e = refine_rules(R0, corpus_gold, param)
 
     print(f"len(new_rules) = {len(R0e)}")
     R0e_test = GRS(R0e.safe_rules().onf())
