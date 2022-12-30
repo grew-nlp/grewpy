@@ -262,8 +262,12 @@ if __name__ == "__main__":
         "node_impurity" : 0.1,
         "number_of_extra_leaves" : 3
     }
-    corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
-    #corpus_gold = Corpus("examples/resources/pud_10.conllu")
+
+    if len(sys.argv) > 1:
+        corpus_file = sys.argv[1]
+    else:
+        corpus_file = "examples/resources/fr_pud-ud-test.conllu"
+    corpus_gold = Corpus (corpus_file)
     R0, rule_eval = rank0(corpus_gold, param)
 
     corpus_empty = corpus_remove_edges(corpus_gold)
