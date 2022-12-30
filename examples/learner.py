@@ -195,6 +195,7 @@ def refine_rule(R, corpus, param):
             request = Request(R.request) #builds a new Request
             for feature_index, negative in branch:
                 n, feat, feat_value = fpat[feature_index]
+                feat_value = feat_value.replace('"', '\\"')
                 if negative:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
