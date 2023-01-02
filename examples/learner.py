@@ -119,7 +119,7 @@ def fvs(matchings, corpus, param):
     for m in matchings:
         graph = corpus[m["sent_id"]]
         nodes = m['matching']['nodes']
-        for n in nodes:
+        for n in {'X','Y'}:
             N = graph[nodes[n]] #feature structure of N
             for k,v in N.items():
                 if k not in features[n]:
@@ -227,7 +227,7 @@ def refine_rule(R, corpus, param):
             x = 0
         """
 
-def refine_rules(Rs, corpus, param):
+def refine_rules(Rs, rule_eval,corpus, param):
     """
     as above, but applies on a list of rules
     return the list of refined version of rules Rs
@@ -334,10 +334,10 @@ if __name__ == "__main__":
         {sid: Rspan0_test.run(corpus_empty_span[sid], 'main')[0] for sid in corpus_empty_span})
     print(corpus_span0.diff(corpus_gold_span))
     print(corpus_span0.diff(corpus_gold))
-    Rspane = refine_rules(Rspan0, corpus_gold_span, param)
+    Rspane = refine_rules(Rspan0, r0eval, corpus_gold_span, param)
     Rspane_test = GRS(Rspane.safe_rules().onf())
     c1 = Corpus(
-        {sid: R0e_test.run(corpus_gold_span[sid], 'main')[0] for sid in corpus_empty_span})
+        {sid: Rspane_test.run(corpus_gold_span[sid], 'main')[0] for sid in corpus_empty_span})
     print(c1.diff(corpus_gold))
 
     R0, rule_eval = rank0(corpus_gold, param)
@@ -354,7 +354,7 @@ if __name__ == "__main__":
     print(corpus_rank0.diff(corpus_gold))
 
     print(f"len(R0) = {len(R0)}")
-    R0e = refine_rules(R0, corpus_gold, param)
+    R0e = refine_rules(R0, rule_eval, corpus_gold, param)
 
     print(f"len(new_rules) = {len(R0e)}")
     R0e_test = GRS(R0e.safe_rules().onf())
