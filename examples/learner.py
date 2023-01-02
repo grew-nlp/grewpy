@@ -208,6 +208,7 @@ def refine_rule(R, corpus, param):
             request = Request(R.request) #builds a new Request
             for feature_index, negative in branch:
                 n, feat, feat_value = fpat[feature_index]
+                feat_value = feat_value.replace('"', '\\"')
                 if negative:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
@@ -315,7 +316,12 @@ if __name__ == "__main__":
         "node_impurity" : 0.1,
         "number_of_extra_leaves" : 3
     }
-    corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    if len(sys.argv) > 1:
+        corpus_file = sys.argv[1]
+    else:
+        corpus_file = "examples/resources/fr_pud-ud-test.conllu"
+    corpus_gold = Corpus (corpus_file)
+
     corpus_gold_span = corpus_span(corpus_gold)
 
     Rspan0, r0eval = span_rules(corpus_gold_span,param)
@@ -334,7 +340,6 @@ if __name__ == "__main__":
         {sid: R0e_test.run(corpus_gold_span[sid], 'main')[0] for sid in corpus_empty_span})
     print(c1.diff(corpus_gold))
 
-    #corpus_gold = Corpus("examples/resources/pud_10.conllu")
     R0, rule_eval = rank0(corpus_gold, param)
 
     corpus_empty = corpus_remove_edges(corpus_gold)

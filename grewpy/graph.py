@@ -11,6 +11,7 @@ import numpy as np
 from grewpy.grew import GrewError
 from grewpy.network import send_and_receive
 from grewpy import utils
+from . import network
 
 ''' interfaces'''
 class Fs_edge(dict):
@@ -47,12 +48,21 @@ class Graph():
             self.meta = kwargs.get("meta", dict())
             self._sucs = kwargs.get("sucs", dict())
         elif isinstance(data,str):
-            #either json or filename
-            try:
-                data_json = json.loads(data)
-                self.__of_dict(data_json)
-            except json.decoder.JSONDecodeError:
-                pass # TODO load file
+            #either filename, json or conll
+            if os.path.isfile(data):
+                req = {"command": "graph_load", "file": data}
+                data_json = network.send_and_receive(req)
+            else:
+                try:
+                    data_json = json.loads(data)
+                    self.__of_dict(data_json)
+                except json.decoder.JSONDecodeError:
+                    with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
+                        f.write(data)
+                        f.flush()  # to be read by others
+                        req = {"command": "graph_load", "file": f.name}
+                        data_json = network.send_and_receive(req)
+            self.__of_dict(data_json)
         elif isinstance(data, Graph):
             self.features = dict(data.features)
             self._sucs = dict(data._sucs)
@@ -126,8 +136,8 @@ class Graph():
         """
         return a CoNLL string for the given graph
         """
-        data = self.json()
-        req = {"command": "conll_graph", "graph": data}
+        data = self.json_data()
+        req = {"command": "graph_to_conll", "graph": data}
         reply = send_and_receive(req)
         return reply
 
@@ -148,10 +158,10 @@ class Graph():
         return None
 
     def run(self, Grs, strat="main"):
-        Grs.run(self, strat)
+        return Grs.run(self, strat)
 
     def apply(self, Grs, strat="main"):
-        Grs.apply(self, strat)
+        return Grs.apply(self, strat)
 
     def diff(self, other) -> np.array:
         E1 = self.triples()  # set of edges as triples
