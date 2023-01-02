@@ -340,7 +340,7 @@ class GRS:
                 "strat": strat
             }
             reply = network.send_and_receive(req)
-            return [Graph(s) for s in reply]
+            return [Graph.from_json(s) for s in reply]
         elif isinstance(data, Corpus):
             req = {
                 "command": "grs_run_corpus",

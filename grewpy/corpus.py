@@ -107,7 +107,7 @@ class Corpus:
         """
         req = {"command": "corpus_get",
                    "corpus_index": self._id, "sent_id": sent_id}
-        return (Graph(network.send_and_receive(req)))
+        return (Graph.from_json(network.send_and_receive(req)))
     
     def __getitem__(self, data):
         """
@@ -131,7 +131,7 @@ class Corpus:
         return a dictionary mapping sentence ids to graphs
         """
         dico = network.send_and_receive({"command": "corpus_get_all", "corpus_index": self._id})
-        return {sid: Graph(json_data) for (sid,json_data) in dico.items() }
+        return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
     def search(self, request, clustering_keys=[]):

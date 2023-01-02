@@ -265,10 +265,10 @@ def corpus_span(corpus):
         while todo:
             n = todo.pop(0)
             for s,_ in g.sucs[n]:
-                if g.lower(s,n) and g.lower(left[s],left[n]):
+                if g.lower(left[s],left[n]):
                     left[n] = left[s]
                     todo.append(n)
-                if g.greater(s,n) and g.greater(right[s],right[n]):
+                if g.greater(right[s],right[n]):
                     right[n] = right[s]
                     todo.append(n)
         for i in g:

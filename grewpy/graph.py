@@ -32,17 +32,27 @@ class Fs_edge(dict):
 class Graph():
     """
     a dict mapping node keys to feature structure
-    with an extra dict mapping node keys to successors (pair of edge feature,node key)
+
+    with extra data:
+        - an extra dict `sucs` mapping node keys to successors (pair of edge feature,node key)
+        - the list `order` containing nodes linearly ordered
+        - and the `meta`(data) as a dict
+
+    Param data: either
+        - None: return an empty graph
+        - a json formatted string
+        - a file name containing a json/conll
+        - a Graph: return a copy of the graph
+        - or named arguments: `features`, `sucs`, `meta` and `order`
     """
     def __init__(self,data=None, **kwargs):
-        """
-        :param data: either None=>empty graph
-        a string: a json representation => read json
-        a json-decoded representation => fill with json
-        an oterh graph => copy the dict
-        :return: a graph
-        """
-        if data is None:
+
+        if isinstance(data, Graph):
+            self.features = dict(data.features)
+            self._sucs = dict(data._sucs)
+            self.meta = dict(data.meta)
+            self.order = list(data.order)  
+        elif data is None:
             self.features = kwargs.get("features", dict())
             self.order = kwargs.get("order", [])
             self.meta = kwargs.get("meta", dict())
@@ -55,30 +65,32 @@ class Graph():
             else:
                 try:
                     data_json = json.loads(data)
-                    self.__of_dict(data_json)
                 except json.decoder.JSONDecodeError:
                     with tempfile.NamedTemporaryFile(mode="w", delete=True, suffix=".conll") as f:
                         f.write(data)
                         f.flush()  # to be read by others
                         req = {"command": "graph_load", "file": f.name}
                         data_json = network.send_and_receive(req)
-            self.__of_dict(data_json)
-        elif isinstance(data, Graph):
-            self.features = dict(data.features)
-            self._sucs = dict(data._sucs)
-            self.meta = dict(data.meta)
-            self.order = list(data.order)
-        elif isinstance(data, dict):
-            self.__of_dict(data)          
-            
+            (self.features, self.sucs, self.meta, self.order) = Graph._from_json(data_json)
+        assert isinstance(self.features,dict)
+     
 
-    def __of_dict(self,data_json):
-        self.features = data_json["nodes"]
-        self._sucs = dict()
+    @staticmethod
+    def _from_json(data_json):
+        features = data_json["nodes"]
+        sucs = dict()
         for edge in data_json.get("edges", []):
-            utils.map_append (self._sucs, edge["src"], (edge["tar"], Fs_edge(edge["label"]))) # TODO gestion des "label" implicite
-        self.meta = data_json.get("meta", dict())
-        self.order = data_json.get("order", list())
+            # TODO gestion des "label" implicite
+            utils.map_append(sucs, edge["src"],
+                             (edge["tar"], Fs_edge(edge["label"])))
+        meta = data_json.get("meta", dict())
+        order = data_json.get("order", list())
+        return (features, sucs, meta, order)
+
+    @classmethod
+    def from_json(cls,data_json):
+        (features, sucs, meta, order) = Graph._from_json(data_json)
+        return cls(features=features, sucs=sucs, order=order, meta=meta)
 
     def __len__(self):
         """
@@ -143,7 +155,7 @@ class Graph():
 
     def triples(self):
         """
-        return the set of edges presented as: (n,e,s), n-[e]-> s         
+        return the set of edges presented as triples (n,e,s) with n-[e]-> s         
         """
         return set((n, e, s) for n in self._sucs for e,s in self._sucs[n])
 
@@ -168,12 +180,13 @@ class Graph():
         E2 = other.triples()
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
-    def lower(self, n, s):
+    def lower(self, n, m):
         """
-        return True if n < s in g
+        given node n and m in g:
+        return True if n < m in g
         """
-        if n in self.order and s in self.order:
-            return self.order.index(n) < self.order.index(s)
+        if n in self.order and m in self.order:
+            return self.order.index(n) < self.order.index(m)
         return False
 
     def greater(self, n, s):

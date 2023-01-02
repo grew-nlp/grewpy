@@ -39,7 +39,7 @@ g1.sucs['C'].append(("A",{"1":"E"}))
 print(g1.sucs['C'])
 print("---remove C edges---")
 g1.sucs['C'] = []
-g1.sucs['D'].append(('C',{'1':'F'}))
+#g1.sucs['D'].append(('C',{'1':'F'}))
 
 
 
