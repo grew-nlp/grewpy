@@ -29,9 +29,12 @@ class CorpusDraft(dict):
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
-        acorpus = data if isinstance(data, Corpus) else Corpus(data)
-        self._sent_ids = acorpus.get_sent_ids() #specifies the sentences order
-        super().__init__(acorpus.get_all())
+        if isinstance(data, dict):
+            super().__init__(data)
+        else:
+            acorpus = data if isinstance(data, Corpus) else Corpus(data)
+            self._sent_ids = acorpus.get_sent_ids() #specifies the sentences order
+            super().__init__(acorpus.get_all())
 
     def __getitem__(self, data):
         """
@@ -46,9 +49,6 @@ class CorpusDraft(dict):
             return self[self._sent_ids[data]]
         if isinstance(data, slice):
             return [self[sid] for sid in self._sent_ids[data]]
-
-    def __iter__(self):
-        return iter(self._sent_ids)
 
     def map(self, fun):
         """

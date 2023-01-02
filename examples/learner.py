@@ -6,7 +6,7 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
 from grewpy import Corpus, GRS, set_config
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Graph
 
 #type declaration
 Count = dict[str,int]
@@ -69,6 +69,19 @@ def rank0(corpus : Corpus, param) -> GRSDraft:
     build_rules("X[];Y[];X<Y", rules, corpus, "lr", rule_eval, param)
     build_rules("X[];Y[];Y<X", rules, corpus, "rl", rule_eval, param)
     return rules, rule_eval
+
+def span_rules(corpus, param):
+    rules = GRSDraft()
+    rule_eval = dict()
+    span = "LEFT_SPAN|RIGHT_SPAN"
+    build_rules(f"X[];Y[];X -[{span}]->Z;Z<Y", rules, corpus, "span_Zlr", rule_eval, param)
+    build_rules(f"X[];Y[];X -[{span}]->Z;Y<Z", rules, corpus, "span_Zrl", rule_eval, param)
+    build_rules(f"X[];Y[];Y -[{span}]->T;X<T",rules, corpus, "span_Tlr", rule_eval, param)
+    build_rules(f"X[];Y[];Y -[{span}]->T;T<X", rules, corpus, "spanT_rl", rule_eval, param)
+    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;Z<T", rules, corpus, "span_ZTlr", rule_eval, param)
+    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z", rules, corpus, "span_ZTrl", rule_eval, param)
+    return rules, rule_eval
+
 
 def nofilter(k,v,param):
     """
@@ -237,17 +250,58 @@ def refine_rules(Rs, corpus, param):
             Rse[rule_name] = R
     return Rse
 
+def corpus_span(corpus):
+    """
+    add span edges to graphs in corpus
+    """
+    def add_span(g):
+        N = len(g)
+        left,right = {i : i for i in g }, {i : i for i in g}
+        todo = [i for i in g]
+        for i in g:
+            if i not in g.sucs:
+                g.sucs[i] = []
+        while todo:
+            n = todo.pop(0)
+            for s,_ in g.sucs[n]:
+                if g.lower(s,n) and g.lower(left[s],left[n]):
+                    left[n] = left[s]
+                    todo.append(n)
+                if g.greater(s,n) and g.greater(right[s],right[n]):
+                    right[n] = right[s]
+                    todo.append(n)
+        for i in g:
+            g.sucs[i].append((left[i],{'1':'LEFT_SPAN'}))
+            g.sucs[i].append((right[i],{'1':'RIGHT_SPAN'}))
+        return g
+            
+    draft = CorpusDraft(corpus)
+    return Corpus(draft.map(add_span))
 
 def corpus_remove_edges(corpus):
     """
     create a corpus based on *corpus* whose graphs have no edges
     """
     def clear_edges(g):
-        for n in g:
-            g.sucs[n] = []
+        del g.sucs
         return g
     return Corpus(CorpusDraft(corpus).map(clear_edges))
 
+def corpus_remove_edges_but_span(corpus):
+    """
+    remove edges but spans within corpus
+    """
+    def is_span(e):
+        if "1" not in e:
+            return False
+        return "SPAN" in e["1"]
+        
+    def clear_but_span(g):
+        for n in g.sucs:
+            g.sucs[n] = [(s,e) for (s,e) in g.sucs[n] if is_span(e)]
+        return (g)
+    return Corpus(CorpusDraft(corpus).map(clear_but_span))
+    
 if __name__ == "__main__":
     set_config("sud")
     param = {
@@ -262,6 +316,24 @@ if __name__ == "__main__":
         "number_of_extra_leaves" : 3
     }
     corpus_gold = Corpus("examples/resources/fr_pud-ud-test.conllu")
+    corpus_gold_span = corpus_span(corpus_gold)
+
+    Rspan0, r0eval = span_rules(corpus_gold_span,param)
+    print(f"len(Rspan0) = {len(Rspan0)}")
+    corpus_empty_span = corpus_remove_edges_but_span(corpus_gold_span)
+    print(corpus_empty_span.diff(corpus_gold_span))
+    print(f"len(R0) = {len(Rspan0)}")
+    Rspan0_test = GRS(Rspan0.safe_rules().onf())
+    corpus_span0 = Corpus(
+        {sid: Rspan0_test.run(corpus_empty_span[sid], 'main')[0] for sid in corpus_empty_span})
+    print(corpus_span0.diff(corpus_gold_span))
+    print(corpus_span0.diff(corpus_gold))
+    Rspane = refine_rules(Rspan0, corpus_gold_span, param)
+    Rspane_test = GRS(Rspane.safe_rules().onf())
+    c1 = Corpus(
+        {sid: R0e_test.run(corpus_gold_span[sid], 'main')[0] for sid in corpus_empty_span})
+    print(c1.diff(corpus_gold))
+
     #corpus_gold = Corpus("examples/resources/pud_10.conllu")
     R0, rule_eval = rank0(corpus_gold, param)
 

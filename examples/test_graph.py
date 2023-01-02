@@ -33,5 +33,15 @@ print ("---- sucs 1 ----")
 print (g1.sucs["B"])
 
 
+print("---modify a graph---")
+print("----- add an edge ---")
+g1.sucs['C'].append(("A",{"1":"E"}))
+print(g1.sucs['C'])
+print("---remove C edges---")
+g1.sucs['C'] = []
+g1.sucs['D'].append(('C',{'1':'F'}))
+
+
+
 print ("---- JSON output of a graph ----")
 print (json.dumps(g1.json_data(), indent=4))

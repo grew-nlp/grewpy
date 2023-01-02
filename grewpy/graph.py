@@ -33,7 +33,7 @@ class Graph():
     a dict mapping node keys to feature structure
     with an extra dict mapping node keys to successors (pair of edge feature,node key)
     """
-    def __init__(self,data=None):
+    def __init__(self,data=None, **kwargs):
         """
         :param data: either None=>empty graph
         a string: a json representation => read json
@@ -42,10 +42,10 @@ class Graph():
         :return: a graph
         """
         if data is None:
-            self.features = dict()
-            self._sucs = dict()  # ??? initaliser à []
-            self.meta = dict()
-            self.order = []
+            self.features = kwargs.get("features", dict())
+            self.order = kwargs.get("order", [])
+            self.meta = kwargs.get("meta", dict())
+            self._sucs = kwargs.get("sucs", dict())
         elif isinstance(data,str):
             #either json or filename
             try:
@@ -59,7 +59,8 @@ class Graph():
             self.meta = dict(data.meta)
             self.order = list(data.order)
         elif isinstance(data, dict):
-            self.__of_dict(data)
+            self.__of_dict(data)          
+            
 
     def __of_dict(self,data_json):
         self.features = data_json["nodes"]
@@ -84,13 +85,16 @@ class Graph():
     def __iter__(self):
         return iter(self.features)
 
-    @property
-    def sucs(self):
+    def _gsucs(self):
         return self._sucs
 
-    @sucs.setter
-    def sucs(self, k,v):
-        self._suc[k] = v
+    def _ssucs(self, v):
+        self._sucs = v
+
+    def _dsucs(self):
+        self._sucs.clear()
+
+    sucs = property(_gsucs, _ssucs, _dsucs, "successor relation")
 
     def to_dot(self): # TODO fix it
         """
@@ -153,3 +157,19 @@ class Graph():
         E1 = self.triples()  # set of edges as triples
         E2 = other.triples()
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
+
+    def lower(self, n, s):
+        """
+        return True if n < s in g
+        """
+        if n in self.order and s in self.order:
+            return self.order.index(n) < self.order.index(s)
+        return False
+
+    def greater(self, n, s):
+        """
+        return True if n > s in g
+        """
+        if n in self.order and s in self.order:
+            return self.order.index(n) > self.order.index(s)
+        return False
