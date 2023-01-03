@@ -279,8 +279,7 @@ class GRSDraft(Package):
     def onf(self, strat_name="main"):
         self[strat_name] = f'Onf(Alt({",".join(self.rules())}))'
         return self
-
-        
+      
 class GRS:
     """
     An abstract GRS. Offers the possibility to apply rewriting.

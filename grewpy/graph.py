@@ -139,7 +139,7 @@ class Graph():
                 if len(s.keys()) == 1 and '1' in s.keys():
                     s = s["1"]
                 edg_list.append({"src":f"{n}", "label":s,"tar":f"{e}"})
-        return {"nodes" : nds, "edges" : edg_list, "order": self.order }
+        return {"nodes" : nds, "edges" : edg_list, "order": self.order, "meta" : self.meta }
 
     def __str__(self):
         return f"({str(self.features)}, {str(self._sucs)})" # TODO order, meta
@@ -157,15 +157,16 @@ class Graph():
         """
         return the set of edges presented as triples (n,e,s) with n-[e]-> s         
         """
-        return set((n, e, s) for n in self._sucs for e,s in self._sucs[n])
+        return set((n, e, s) for n in self._sucs for s,e in self._sucs[n])
 
-    def edge(self, n, s):
+    def edge(self, n, m):
         """
-        return the label in the edge if it exists
+        given node n and m
+        return the label of an edge between n and m if it exists
         """
         if n in self._sucs:
             for (k,v) in self.sucs[n]:
-                if k == s:
+                if k == m:
                     return str(v)
         return None
 
@@ -175,9 +176,9 @@ class Graph():
     def apply(self, Grs, strat="main"):
         return Grs.apply(self, strat)
 
-    def diff(self, other) -> np.array:
-        E1 = self.triples()  # set of edges as triples
-        E2 = other.triples()
+    def diff(self, other, skip_edge_criterion=lambda e: False) -> np.array:
+        E1 = {x for x in self.triples() if not skip_edge_criterion(x[1])}  # set of edges as triples
+        E2 = {x for x in other.triples() if not skip_edge_criterion(x[1])}
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
     def lower(self, n, m):

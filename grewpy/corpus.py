@@ -22,7 +22,7 @@ class CorpusDraft(dict):
       - self, a dict mapping sentence_id to graphs
       - self._sent_ids, a list that specifies the sentence order
     """
-    def __init__(self,data):
+    def __init__(self,data=None):
         """Load a corpus from a file of a string
         :param data: a file, a list of files or a CoNLL string representation of a corpus
         :param local: state whether we load a local copy of each graph of the corpus
@@ -31,6 +31,8 @@ class CorpusDraft(dict):
         """
         if isinstance(data, dict):
             super().__init__(data)
+        elif data == None:
+            super().__init__()
         else:
             acorpus = data if isinstance(data, Corpus) else Corpus(data)
             self._sent_ids = acorpus.get_sent_ids() #specifies the sentences order
@@ -55,6 +57,24 @@ class CorpusDraft(dict):
         Apply fun to all graphs, return the new Corpus
         """
         return CorpusDraft({sid : fun(self[sid]) for sid in self})
+
+    def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):
+        """
+        given two corpora, outputs the number of common edges, only left ones and only right ones
+        """
+        (common, left, right) = np.sum(
+            [self[sid].diff(corpus_gold[sid],skip_edge_criterion) for sid in self], axis=0)
+        precision = common / (common + left+1e-10)
+        recall = common / (common + right+1e-10)
+        f_measure = 2*precision*recall / (precision+recall+1e-10)
+        return {
+            "common": common,
+            "left": left,
+            "right": right,
+            "precision": round(precision, 3),
+            "recall": round(recall, 3),
+            "f_measure": round(f_measure, 3),
+        }
 
 
 
@@ -166,11 +186,11 @@ class Corpus:
             "clustering_keys": clustering_keys,
         })
 
-    def diff(self, corpus_gold):
+    def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):
         """
         given two corpora, outputs the number of common edges, only left ones and only right ones
         """
-        (common, left, right) = np.sum([self[sid].diff(corpus_gold[sid]) for sid in self], axis=0)
+        (common, left, right) = np.sum([self[sid].diff(corpus_gold[sid], skip_edge_criterion) for sid in self], axis=0)
         precision = common / (common + left)
         recall = common / (common + right)
         f_measure = 2*precision*recall / (precision+recall)

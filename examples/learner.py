@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 from sklearn import tree
 from sklearn.tree import DecisionTreeClassifier
-import sys, os
+import sys, os, math
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
@@ -192,12 +193,13 @@ def find_classes(clf, param):
 
 def refine_rule(R, corpus, param):
     """
-    takes a rule R, tries to find variants
-    the result is the list of rules that should replace R
+    Takes a request R, tries to find variants
+    
+    the result is the list of rules that refine pattern R
     for DEBUG, we return the decision tree classifier
     """
     res = []
-    matchings = corpus.search(R.request)
+    matchings = corpus.search(R)
     fpat = fvs(matchings, corpus, param) #the list of all feature values 
     pos = {fpat[i]: i for i in range(len(fpat))}
     clf, y1 = create_classifier(matchings, pos, corpus, param)
@@ -205,7 +207,7 @@ def refine_rule(R, corpus, param):
         branches = find_classes(clf, param) #extract interesting branches
         for node in branches:
             branch=branches[node]
-            request = Request(R.request) #builds a new Request
+            request = Request(R) #builds a new Request
             for feature_index, negative in branch:
                 n, feat, feat_value = fpat[feature_index]
                 feat_value = feat_value.replace('"', '\\"')
@@ -227,26 +229,28 @@ def refine_rule(R, corpus, param):
             x = 0
         """
 
-def refine_rules(Rs, rule_eval,corpus, param):
+def refine_rules(Rs, rule_eval,corpus, param,debug=False):
     """
     as above, but applies on a list of rules
+    and filter only "correct" rules, see `param`
     return the list of refined version of rules Rs
     """
     Rse = GRSDraft()
     for rule_name in Rs.rules():
         R = Rs[rule_name]
         if rule_eval[rule_name][1] < param["valid_threshold"]:
-            new_r, clf = refine_rule(R, corpus, param)
+            new_r, clf = refine_rule(R.request, corpus, param)
             if len(new_r) >= 1:
                 cpt = 1
-                print("--------------------------replace")
-                print(R)
+                if debug:
+                    print("--------------------------replace")
+                    print(R)
                 for r in new_r:
-                    print("by : ")
-                    print(r)
+                    if debug:
+                        print("by : ")
+                        print(r)
                     Rse[f"{rule_name}_enhanced{cpt}"] = r
                     cpt += 1
-
         else:
             Rse[rule_name] = R
     return Rse
@@ -302,7 +306,29 @@ def corpus_remove_edges_but_span(corpus):
             g.sucs[n] = [(s,e) for (s,e) in g.sucs[n] if is_span(e)]
         return (g)
     return Corpus(CorpusDraft(corpus).map(clear_but_span))
-    
+
+def get_best_solution(corpus_gold, corpus_empty_edges, grs):
+    """
+    grs is a GRSDraft
+    return the best solution using the grs with respect to the gold corpus
+    the grs does not need to be confluent. We take the best solution with 
+    respect to the f-score
+    """
+    def f_score(t):
+        return t[0]/math.sqrt((t[0]+t[1])*(t[0]*t[2])+1e-20)
+
+    corpus_draft = CorpusDraft(corpus_empty)
+    for sid in corpus_gold:
+        gs = grs.run(corpus_empty_edges[sid],'main')
+        best_fscore = 0
+        for g in gs:
+            fs = f_score(g.diff(corpus_gold[sid]))
+            if  fs > best_fscore:
+                best_fscore = fs
+                corpus_draft[sid] = g
+        #assert sum(corpus_draft[sid].diff( grs.run(corpus_empty_edges[sid],'main'))[1:]) == 0
+    return corpus_draft
+
 if __name__ == "__main__":
     set_config("sud")
     param = {
@@ -319,46 +345,42 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         corpus_file = sys.argv[1]
     else:
-        corpus_file = "examples/resources/fr_pud-ud-test.conllu"
+        corpus_file = "examples/resources/fr_pud-sud-test.conllu"
     corpus_gold = Corpus (corpus_file)
-
+    corpus_empty = corpus_remove_edges(corpus_gold)
     corpus_gold_span = corpus_span(corpus_gold)
-
-    Rspan0, r0eval = span_rules(corpus_gold_span,param)
-    print(f"len(Rspan0) = {len(Rspan0)}")
     corpus_empty_span = corpus_remove_edges_but_span(corpus_gold_span)
-    print(corpus_empty_span.diff(corpus_gold_span))
-    print(f"len(R0) = {len(Rspan0)}")
-    Rspan0_test = GRS(Rspan0.safe_rules().onf())
-    corpus_span0 = Corpus(
-        {sid: Rspan0_test.run(corpus_empty_span[sid], 'main')[0] for sid in corpus_empty_span})
-    print(corpus_span0.diff(corpus_gold_span))
-    print(corpus_span0.diff(corpus_gold))
-    Rspane = refine_rules(Rspan0, r0eval, corpus_gold_span, param)
-    Rspane_test = GRS(Rspane.safe_rules().onf())
-    c1 = Corpus(
-        {sid: Rspane_test.run(corpus_gold_span[sid], 'main')[0] for sid in corpus_empty_span})
-    print(c1.diff(corpus_gold))
 
     R0, rule_eval = rank0(corpus_gold, param)
-
-    corpus_empty = corpus_remove_edges(corpus_gold)
-    print(corpus_empty.diff(corpus_gold))
-    print(f"len(R0) = {len(R0)}")
-    R0_test = GRS(R0.safe_rules().onf()) 
-  
-    corpus_rank0 = Corpus({ sid : R0_test.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
-    A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"),[])
+    A = corpus_gold.count(Request("X[];Y[];X<Y;X->Y"), [])
     A += corpus_gold.count(Request("X[];Y[];Y<X;X->Y"), [])
-    print(f"A = {A}")
-    print(corpus_rank0.diff(corpus_gold))
+    print("---target----")
+    print(corpus_empty.diff(corpus_gold))
+    print(f"number of adjacent relations: {A}")
+    print(f"adjacent rules before refinement: len(R0) = {len(R0)}")
+    R0_test = GRS(R0.safe_rules().onf()) 
+    c = get_best_solution(corpus_gold, corpus_empty, R0_test) 
+    print(c.diff(corpus_gold))
 
-    print(f"len(R0) = {len(R0)}")
     R0e = refine_rules(R0, rule_eval, corpus_gold, param)
-
-    print(f"len(new_rules) = {len(R0e)}")
+    print(f"after refinement: len(R0e) = {len(R0e)}")
     R0e_test = GRS(R0e.safe_rules().onf())
+    c = get_best_solution(corpus_gold, corpus_empty, R0e_test)
+    print(c.diff(corpus_gold))
 
-    corpus_rank0_refined = Corpus({sid: R0e_test.run(corpus_empty[sid], 'main')[0] for sid in corpus_empty})
-    print(f"A = {A}")
-    print(corpus_rank0_refined.diff(corpus_gold))
+    Rs0, r0eval = span_rules(corpus_gold_span,param)
+    print(f"span rules: len(Rs0) = {len(Rs0)}")
+    Rs0_t = GRS(Rs0.safe_rules().onf())
+
+    Rs0e = refine_rules(Rs0, r0eval, corpus_gold_span, param)
+    Rs0e_t = GRS(Rs0e.safe_rules().onf())
+    print(f"span rules after refinement {len(Rs0e)}")
+    c = get_best_solution(corpus_gold_span, corpus_empty_span, Rs0e_t)
+    print(c.diff(corpus_gold_span, lambda e: "SPAN" in e["1"]))
+
+    #union of adjacent rules and span rules
+    R0f = GRSDraft(R0e | Rs0e)
+    R0f_t = GRS(R0f.safe_rules().onf())
+    c = get_best_solution(corpus_gold_span, corpus_empty_span, R0f_t)
+    print(c.diff(corpus_gold_span, lambda e: "SPAN" in e["1"]))
+    print(R0f)
