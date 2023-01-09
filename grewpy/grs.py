@@ -128,11 +128,15 @@ class Command:
 
 class Add_edge(Command):
     def __init__(self,X,e,Y):
-        super().__init__(f"add_edge {X}-[{e}]->{Y}")
+        if isinstance(e, dict):
+            s = ",".join(f"{k}={v}" for k,v in e.items())
+        else:
+            s = str(e)
+        super().__init__(f"add_edge {X}-[{s}]->{Y}")
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):           
-        return RequestItem("without",f"{self.X} -[{self.e}]->{self.Y}")
+        return RequestItem("without",self.item.replace("add_edge",""))
 
 class Delete_edge(Command):
     def __init__(self, X, e, Y):
@@ -140,7 +144,7 @@ class Delete_edge(Command):
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):           
-        return RequestItem("pattern", f"{self.X} -[{self.e}]->{self.Y}")
+        return RequestItem("pattern", self.item.replace("add_edge", ""))
 
 
 class Commands(list):
