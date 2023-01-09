@@ -155,9 +155,9 @@ class Graph():
 
     def triples(self):
         """
-        return the set of edges presented as triples (n,e,s) with n-[e]-> s         
+        return the list of edges presented as triples (n,e,s) with n-[e]-> s         
         """
-        return set((n, e, s) for n in self._sucs for s,e in self._sucs[n])
+        return list((n, e, s) for n in self._sucs for s,e in self._sucs[n])
 
     def edge(self, n, m):
         """
@@ -177,8 +177,9 @@ class Graph():
         return Grs.apply(self, strat)
 
     def diff(self, other, skip_edge_criterion=lambda e: False) -> np.array:
-        E1 = {x for x in self.triples() if not skip_edge_criterion(x[1])}  # set of edges as triples
-        E2 = {x for x in other.triples() if not skip_edge_criterion(x[1])}
+        E1 = {(m,repr(e),n) for (m,e,n) in self.triples() if not skip_edge_criterion(e)}  # set of edges as triples
+        E2 = {(m, repr(e), n) for (m, e, n) in other.triples()
+              if not skip_edge_criterion(e)}  # set of edges as triples
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
     def lower(self, n, m):
