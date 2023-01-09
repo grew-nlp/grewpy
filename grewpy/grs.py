@@ -296,7 +296,7 @@ class GRS:
         """
         if isinstance(args, str):
             if os.path.isfile(args):
-                req = {"command": "load_grs", "filename": args}
+                req = {"command": "load_grs", "file": args}
             else:
                 req = {"command": "load_grs", "str": args}
         elif isinstance(args, GRSDraft):
@@ -343,7 +343,7 @@ class GRS:
         elif isinstance(data, Corpus):
             req = {
                 "command": "grs_run_corpus",
-                "corpus": data.get_id(),
+                "corpus_index": data.get_id(),
                 "grs_index": self.id,
                 "strat": strat
             }
@@ -372,7 +372,7 @@ class GRS:
         elif isinstance(data, Corpus):
             req = {
                 "command": "grs_apply_corpus",
-                "corpus": data.get_id(),
+                "corpus_index": data.get_id(),
                 "grs_index": self.id,
                 "strat": strat
             } # return None because inplace

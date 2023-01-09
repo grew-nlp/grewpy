@@ -23,9 +23,6 @@ class Fs_edge(dict):
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
-    def __str__(self):
-        return (",".join([f"{f}={v}" for (f,v) in self.items()]))
-
     def __hash__(self):
         return (hash (str(self)))
 
@@ -57,6 +54,11 @@ class Graph():
             self.order = kwargs.get("order", [])
             self.meta = kwargs.get("meta", dict())
             self._sucs = kwargs.get("sucs", dict())
+        elif isinstance(data, dict):
+            self.features = data.get("features", dict())
+            self.order = data.get("order", [])
+            self.meta = data.get("meta", dict())
+            self._sucs = data.get("sucs", dict())
         elif isinstance(data,str):
             #either filename, json or conll
             if os.path.isfile(data):
@@ -72,8 +74,9 @@ class Graph():
                         req = {"command": "graph_load", "file": f.name}
                         data_json = network.send_and_receive(req)
             (self.features, self.sucs, self.meta, self.order) = Graph._from_json(data_json)
+        else:
+            raise GrewError(f"Cannot build Graph with data of type {type(data)}")
         assert isinstance(self.features,dict)
-     
 
     @staticmethod
     def _from_json(data_json):
@@ -165,9 +168,9 @@ class Graph():
         return the label of an edge between n and m if it exists
         """
         if n in self._sucs:
-            for (k,v) in self.sucs[n]:
+            for (k,v) in self._sucs[n]:
                 if k == m:
-                    return str(v)
+                    return v
         return None
 
     def run(self, Grs, strat="main"):
