@@ -39,13 +39,15 @@ def diff_corpus_rank(c1,c2):
     }
 
 class Observation:
+    """
+    maps a tuple of criteria to a dict mapping edge -> nb of observation
+    """
     @staticmethod
     def _enumerate(obs, crit, L):
         if not obs:
             return
-        if len(crit) == 1:
-            for k in obs:
-                yield (L+(k,), obs[k])
+        if len(crit) == 0:
+            yield (L, obs)
         else:
             for k in obs:
                 yield from Observation._enumerate(obs[k], crit[1:],L + (k,))
@@ -59,6 +61,17 @@ class Observation:
         return self.obs[k]
     def __bool__(self):
         return bool(self.obs)
+
+    def anomaly(self, L,  param):
+        """
+        L is a path within self
+        return for L an observation and its probability if beyond base_threshold
+        """
+        s = sum(self.obs[L].values())
+        for x, v in self.obs[L].items():
+            if v > param["base_threshold"] * s and x:
+                return x, v/s
+        return None, None
         
 
 def cluster(corpus : Corpus, P : Request, cluster_criterion) -> Observation:
@@ -77,15 +90,7 @@ def cluster(corpus : Corpus, P : Request, cluster_criterion) -> Observation:
             obs[L][''] = clus[L]
     return obs
 
-def anomaly(obs,  param):
-    """
-    return an observation and its probability if beyond base_threshold
-    """
-    s = sum(obs.values()) 
-    for x in obs:
-        if obs[x] > param["base_threshold"] * s and x:
-            return x, obs[x]/s
-    return None, None
+
 
 def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule_eval, param, cluster_criterion,rank_level=0):
     """
@@ -107,7 +112,7 @@ def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule
         return f"{crit}={val}"
     obslr = cluster(corpus, base_pattern, cluster_criterion)
     for L in obslr:
-        x,p = anomaly(obslr[L], param)
+        x,p = obslr.anomaly(L, param)
         if x:
             extra_pattern = ";".join(crit_to_request(crit,val) for (crit,val) in zip(cluster_criterion,L))
             P = Request(base_pattern, extra_pattern)
@@ -415,6 +420,15 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
         for o in ordres:
             pat = f'X[];Y[];{ns};{o};f.rank="{rank_n}"'
             build_rules(pat, rules, corpus, '1lr', rule_eval, param, ["X.upos","Y.upos","f.label"], rank_n+1)
+
+    """
+    span = ['X -[LEFT_SPAN|RIGHT_SPAN]->T;Y-[LEFT_SPAN|RIGHT_SPAN]->U;U<T','X -[LEFT_SPAN|RIGHT_SPAN]->T;Y-[LEFT_SPAN|RIGHT_SPAN]->U;T<U']
+    for ns in nodes:
+        for o in span:
+            pat = f'X[];Y[];{ns};{o};f.rank="{rank_n}"'
+            build_rules(pat, rules, corpus, '1lr', rule_eval, param, [
+                        "X.upos", "Y.upos", "f.label"], rank_n+1)
+    """     
     return rules, rule_eval
 
 
@@ -494,7 +508,7 @@ if __name__ == "__main__":
     R3e = refine_rules(R3, R3_eval, corpus_gold, param)
     R3e_t = GRS(R3e.safe_rules().onf())
     computed_corpus_after_rank3 = get_best_solution(corpus_gold_after_rank2, computed_corpus_after_rank2, R3e_t)
-    print(f"---------Rank 3 rules{len(R3e)}")
+    print(f"---------Rank 3 rules {len(R3e)}")
     print((diff_corpus_rank(computed_corpus_after_rank3, corpus_gold)))
 
-
+    print((R0e, R1e, R2e, R3e))
