@@ -562,12 +562,12 @@ if __name__ == "__main__":
 
     corpus_eval_after_r2 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r1, R2e_t)
     print("--------at rank 2-------------")
-    print(diff_corpus_rank(corpus_eval_after_r1, corpus_gold_eval))
+    print(diff_corpus_rank(corpus_eval_after_r2, corpus_gold_eval))
     corpus_filtered_after_r2 = remove_wrong_edges(corpus_eval_after_r2, corpus_gold_eval)
 
     corpus_eval_after_r3 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r2, R3e_t)
     print("--------at rank 3-------------")
-    print(diff_corpus_rank(corpus_eval_after_r2, corpus_gold_eval))
+    print(diff_corpus_rank(corpus_eval_after_r3, corpus_gold_eval))
     corpus_filtered_after_r3 = remove_wrong_edges(corpus_eval_after_r3, corpus_gold_eval)
 
 
