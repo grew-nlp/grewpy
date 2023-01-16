@@ -5,6 +5,7 @@ import sys, os, math
 import numpy as np
 import pickle
 import re
+import argparse
 
 sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../"))) # Use local grew lib
 
@@ -140,8 +141,7 @@ def span_rules(corpus, param):
     build_rules(f"X[];Y[];Y -[{span}]->T;X<T",rules, corpus, "span_Tlr", rule_eval, param, ["X.upos","Y.upos"])
     build_rules(f"X[];Y[];Y -[{span}]->T;T<X", rules, corpus, "spanT_rl", rule_eval, param, ["X.upos","Y.upos"])
     build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;Z<T", rules, corpus, "span_ZTlr", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z", rules,
-                corpus, "span_ZTrl", rule_eval, param, ["X.upos", "Y.upos"])
+    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z", rules, corpus, "span_ZTrl", rule_eval, param, ["X.upos","Y.upos"])
     return rules, rule_eval
 
 
@@ -348,7 +348,7 @@ def corpus_remove_edges_but_span(corpus):
         return (g)
     return Corpus(CorpusDraft(corpus).map(clear_but_span))
 
-def get_best_solution(corpus_gold, corpus_empty_edges, grs):
+def get_best_solution(corpus_gold, corpus_start, grs):
     """
     grs is a GRSDraft
     return the best solution using the grs with respect to the gold corpus
@@ -358,12 +358,12 @@ def get_best_solution(corpus_gold, corpus_empty_edges, grs):
     def f_score(t):
         return t[0]/math.sqrt((t[0]+t[1])*(t[0]*t[2])+1e-20)
 
-    corpus_draft = CorpusDraft(corpus_empty)
+    corpus_draft = CorpusDraft(corpus_start)
     for sid in corpus_gold:
-        gs = grs.run(corpus_empty_edges[sid],'main')
+        gs = grs.run(corpus_start[sid],'main')
         best_fscore = 0
         for g in gs:
-            fs = f_score(g.diff(corpus_gold[sid]))
+            fs = f_score(diff(g, corpus_gold[sid]))
             if  fs > best_fscore:
                 best_fscore = fs
                 corpus_draft[sid] = g
@@ -406,6 +406,33 @@ def update_gold_rank(corpus_gold, computed_corpus):
                 g_gold.sucs[n] = new_sucs
     return new_gold 
 
+def remove_wrong_edges(corpus, corpus_gold):
+    """
+    remove from corpus those edges not in corpus_gold
+    edges are compared up to rank
+    """
+    def extract_edge(edges, e):
+        """
+        return an edge in edges that is equal to e up to rank
+        """
+        for e1 in edges:
+            if edge_equal_up_to_rank(e1, e):
+                return e
+        return None
+    new_corpus = CorpusDraft(corpus)
+    for sid in new_corpus:
+        g_gold = corpus_gold[sid]
+        g_corp = new_corpus[sid]
+        for n in g_corp:
+            old_edges = g_corp.sucs[n]
+            g_corp.sucs[n] = []
+            for (m,e) in old_edges:
+                gold_edges = g_gold.edges(n,m)
+                if extract_edge(gold_edges, e):
+                    g_corp.sucs[n].append((m,e))
+    return new_corpus
+
+
 def rank_n_plus_one(corpus_gold, param, rank_n):
     """
     build rules for corpus
@@ -431,7 +458,18 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
     return rules, rule_eval
 
 
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='learner.py',
+        description='Learn a grammar from sample files',
+        epilog='Use connll files')
+
+    parser.add_argument('train')      
+    parser.add_argument('-e', '--eval', default=None)
+    args = parser.parse_args()
+    if not args.eval:
+        args.eval = args.train
+
     set_config("sud")
     param = {
         "base_threshold": 0.25,
@@ -444,18 +482,18 @@ if __name__ == "__main__":
         "node_impurity" : 0.2,
         "number_of_extra_leaves" : 5
     }
-    if len(sys.argv) > 1:
-        corpus_file = sys.argv[1]
-    else:
-        corpus_file = "examples/resources/fr_pud-sud-test.conllu"
     
-    corpus_gold = Corpus (corpus_file)
+    corpus_gold = Corpus (args.train)
     corpus_gold = init_rank(corpus_gold) #rank label on edges
     corpus_gold = corpus_span(corpus_gold)# span
     corpus_empty = corpus_remove_edges_but_span(corpus_gold)
+
+    corpus_gold_eval = Corpus(args.eval)
+    corpus_gold_eval = init_rank(corpus_gold_eval)
+    corpus_gold_eval = corpus_span(corpus_gold_eval)
+    corpus_empty_eval = corpus_remove_edges_but_span(corpus_gold_eval)
     
     R0, rule_eval = rank0(corpus_gold, param)        
-
     A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'), [])
     A += corpus_gold.count(Request('Y<X;e:X->Y;e.rank="_"'), [])
     print("---target----")
@@ -487,13 +525,11 @@ if __name__ == "__main__":
     computed_corpus_after_rank0 = get_best_solution(corpus_gold, corpus_empty, R0f_t)
     print(diff_corpus_rank(computed_corpus_after_rank0, corpus_gold))
 
-
-
     corpus_gold_after_rank0 = update_gold_rank(corpus_gold, computed_corpus_after_rank0)    
-    R1, R1_eval  = rank_n_plus_one(corpus_gold_after_rank0,param, 0)
+    R1, R1_eval  = rank_n_plus_one(corpus_gold_after_rank0, param, 0)
     R1e = refine_rules(R1, R1_eval, corpus_gold, param, 1)
     R1e_t = GRS(R1e.safe_rules().onf())
-    computed_corpus_after_rank1 = get_best_solution(corpus_gold_after_rank0, computed_corpus_after_rank0, R1e_t)
+    computed_corpus_after_rank1 = get_best_solution(corpus_gold, computed_corpus_after_rank0, R1e_t)
     print(f"-----------Rank 1 rules : {len(R1e)}")
     print((diff_corpus_rank(computed_corpus_after_rank1,corpus_gold)))
 
@@ -501,7 +537,7 @@ if __name__ == "__main__":
     R2, R2_eval = rank_n_plus_one(corpus_gold_after_rank1, param, 1)
     R2e = refine_rules(R2, R2_eval, corpus_gold, param, 2)
     R2e_t = GRS(R2e.safe_rules().onf())
-    computed_corpus_after_rank2 = get_best_solution(corpus_gold_after_rank1, computed_corpus_after_rank1, R2e_t)
+    computed_corpus_after_rank2 = get_best_solution(corpus_gold, computed_corpus_after_rank1, R2e_t)
     print(f"----------Rank 2 rules {len(R2e)}")
     print((diff_corpus_rank(computed_corpus_after_rank2, corpus_gold)))
 
@@ -509,10 +545,33 @@ if __name__ == "__main__":
     R3, R3_eval = rank_n_plus_one(corpus_gold_after_rank2, param, 2)
     R3e = refine_rules(R3, R3_eval, corpus_gold, param, 3)
     R3e_t = GRS(R3e.safe_rules().onf())
-    computed_corpus_after_rank3 = get_best_solution(corpus_gold_after_rank2, computed_corpus_after_rank2, R3e_t)
+    computed_corpus_after_rank3 = get_best_solution(corpus_gold, computed_corpus_after_rank2, R3e_t)
     print(f"---------Rank 3 rules {len(R3e)}")
     print((diff_corpus_rank(computed_corpus_after_rank3, corpus_gold)))
 
+    print("------Now testing on the evaluation corpus----------")
+    corpus_eval_after_r0 = get_best_solution(corpus_gold_eval, corpus_empty_eval, R0f_t)
+    print("--------at rank 0-------------")
+    print(diff_corpus_rank(corpus_eval_after_r0, corpus_gold_eval))
+    corpus_filtered_after_r0 = remove_wrong_edges(corpus_eval_after_r0, corpus_gold_eval)
+
+    corpus_eval_after_r1 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r0, R1e_t)
+    print("--------at rank 1-------------")
+    print(diff_corpus_rank(corpus_eval_after_r1, corpus_gold_eval))
+    corpus_filtered_after_r1 = remove_wrong_edges(corpus_eval_after_r1, corpus_gold_eval)
+
+    corpus_eval_after_r2 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r1, R2e_t)
+    print("--------at rank 2-------------")
+    print(diff_corpus_rank(corpus_eval_after_r1, corpus_gold_eval))
+    corpus_filtered_after_r2 = remove_wrong_edges(corpus_eval_after_r2, corpus_gold_eval)
+
+    corpus_eval_after_r3 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r2, R3e_t)
+    print("--------at rank 3-------------")
+    print(diff_corpus_rank(corpus_eval_after_r2, corpus_gold_eval))
+    corpus_filtered_after_r3 = remove_wrong_edges(corpus_eval_after_r3, corpus_gold_eval)
+
+
+"""
     print("--------R0 rules------")
     for r in R0f:
         print(f"{r} :\n {R0f[r]}")
@@ -525,3 +584,5 @@ if __name__ == "__main__":
     print("--------R3 rules------")
     for r in R3e:
         print(f"{r} :\n {R3e[r]}")
+"""
+

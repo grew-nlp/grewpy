@@ -162,16 +162,31 @@ class Graph():
         """
         return list((n, e, s) for n in self._sucs for s,e in self._sucs[n])
 
+    def from_triples(self, triples):
+        for n in self:
+            self._sucs[n] = []
+        for (n,e,m) in triples:
+            self._sucs[n].append((e,m))
+
     def edge(self, n, m):
         """
         given node n and m
-        return the label of an edge between n and m if it exists
+        return the "first" label of an edge between n and m if it exists
         """
         if n in self._sucs:
             for (k,v) in self._sucs[n]:
                 if k == m:
                     return v
         return None
+
+    def edges(self, n, m):
+        """
+        given node n and m, 
+        return the set of edges between n and m
+        """
+        return [v for (k,v) in self._sucs[n] if k == m]
+
+    
 
     def run(self, Grs, strat="main"):
         return Grs.run(self, strat)
