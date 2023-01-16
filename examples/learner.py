@@ -46,7 +46,7 @@ class Observation:
     def _enumerate(obs, crit, L):
         if not obs:
             return
-        if len(crit) == 0:
+        if not crit:
             yield (L, obs)
         else:
             for k in obs:
@@ -64,8 +64,8 @@ class Observation:
 
     def anomaly(self, L,  param):
         """
-        L is a path within self
-        return for L an observation and its probability if beyond base_threshold
+        L is a key within self
+        return for L an edge and its associated probability if beyond base_threshold
         """
         s = sum(self.obs[L].values())
         for x, v in self.obs[L].items():
@@ -73,7 +73,6 @@ class Observation:
                 return x, v/s
         return None, None
         
-
 def cluster(corpus : Corpus, P : Request, cluster_criterion) -> Observation:
     """
     search for a link X -> Y with respect to pattern P in the corpus
@@ -89,7 +88,6 @@ def cluster(corpus : Corpus, P : Request, cluster_criterion) -> Observation:
         if L in clus:
             obs[L][''] = clus[L]
     return obs
-
 
 
 def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule_eval, param, cluster_criterion,rank_level=0):
@@ -255,7 +253,7 @@ def find_classes(clf, param):
     return acc
 
 
-def refine_rule(R, corpus, param):
+def refine_rule(R, corpus, param, rank):
     """
     Takes a request R, tries to find variants
     
@@ -281,11 +279,12 @@ def refine_rule(R, corpus, param):
                     request.append("pattern",f'{n}[{feat}="{feat_value}"]')
             e = y1[ clf.tree_.value[node].argmax()]
             if e: #here, e == None if there is no edges X -> Y
+                e["rank"] = rank
                 rule = Rule(request, Commands(Add_edge("X",e,"Y")))
                 res.append(rule)
     return res, clf
 
-def refine_rules(Rs, rule_eval,corpus, param,debug=False):
+def refine_rules(Rs, rule_eval,corpus, param,rank,debug=False):
     """
     as above, but applies on a list of rules
     and filter only "correct" rules, see `param`
@@ -295,7 +294,7 @@ def refine_rules(Rs, rule_eval,corpus, param,debug=False):
     for rule_name in Rs.rules():
         R = Rs[rule_name]
         if rule_eval[rule_name][1] < param["valid_threshold"]:
-            new_r, clf = refine_rule(R.request, corpus, param)
+            new_r, clf = refine_rule(R.request, corpus, param, rank)
             if len(new_r) >= 1:
                 cpt = 1
                 if debug:
@@ -455,7 +454,8 @@ if __name__ == "__main__":
     corpus_gold = corpus_span(corpus_gold)# span
     corpus_empty = corpus_remove_edges_but_span(corpus_gold)
     
-    R0, rule_eval = rank0(corpus_gold, param)
+    R0, rule_eval = rank0(corpus_gold, param)        
+
     A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'), [])
     A += corpus_gold.count(Request('Y<X;e:X->Y;e.rank="_"'), [])
     print("---target----")
@@ -466,7 +466,7 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, R0_test) 
     print(diff_corpus_rank(c,corpus_gold))
 
-    R0e = refine_rules(R0, rule_eval, corpus_gold, param)
+    R0e = refine_rules(R0, rule_eval, corpus_gold, param, 0)
     print(f"after refinement: len(R0e) = {len(R0e)}")
     R0e_test = GRS(R0e.safe_rules().onf())
     c = get_best_solution(corpus_gold, corpus_empty, R0e_test)
@@ -475,7 +475,7 @@ if __name__ == "__main__":
     Rs0, r0eval = span_rules(corpus_gold,param)
     print(f"span rules: len(Rs0) = {len(Rs0)}")
 
-    Rs0e = refine_rules(Rs0, r0eval, corpus_gold, param)
+    Rs0e = refine_rules(Rs0, r0eval, corpus_gold, param, 0)
     Rs0e_t = GRS(Rs0e.safe_rules().onf())
     print(f"span rules after refinement {len(Rs0e)}")
     c = get_best_solution(corpus_gold, corpus_empty, Rs0e_t)
@@ -487,9 +487,11 @@ if __name__ == "__main__":
     computed_corpus_after_rank0 = get_best_solution(corpus_gold, corpus_empty, R0f_t)
     print(diff_corpus_rank(computed_corpus_after_rank0, corpus_gold))
 
+
+
     corpus_gold_after_rank0 = update_gold_rank(corpus_gold, computed_corpus_after_rank0)    
     R1, R1_eval  = rank_n_plus_one(corpus_gold_after_rank0,param, 0)
-    R1e = refine_rules(R1, R1_eval, corpus_gold, param)
+    R1e = refine_rules(R1, R1_eval, corpus_gold, param, 1)
     R1e_t = GRS(R1e.safe_rules().onf())
     computed_corpus_after_rank1 = get_best_solution(corpus_gold_after_rank0, computed_corpus_after_rank0, R1e_t)
     print(f"-----------Rank 1 rules : {len(R1e)}")
@@ -497,7 +499,7 @@ if __name__ == "__main__":
 
     corpus_gold_after_rank1 = update_gold_rank(corpus_gold,computed_corpus_after_rank1)
     R2, R2_eval = rank_n_plus_one(corpus_gold_after_rank1, param, 1)
-    R2e = refine_rules(R2, R2_eval, corpus_gold, param)
+    R2e = refine_rules(R2, R2_eval, corpus_gold, param, 2)
     R2e_t = GRS(R2e.safe_rules().onf())
     computed_corpus_after_rank2 = get_best_solution(corpus_gold_after_rank1, computed_corpus_after_rank1, R2e_t)
     print(f"----------Rank 2 rules {len(R2e)}")
@@ -505,10 +507,21 @@ if __name__ == "__main__":
 
     corpus_gold_after_rank2 = update_gold_rank(corpus_gold, computed_corpus_after_rank2)
     R3, R3_eval = rank_n_plus_one(corpus_gold_after_rank2, param, 2)
-    R3e = refine_rules(R3, R3_eval, corpus_gold, param)
+    R3e = refine_rules(R3, R3_eval, corpus_gold, param, 3)
     R3e_t = GRS(R3e.safe_rules().onf())
     computed_corpus_after_rank3 = get_best_solution(corpus_gold_after_rank2, computed_corpus_after_rank2, R3e_t)
     print(f"---------Rank 3 rules {len(R3e)}")
     print((diff_corpus_rank(computed_corpus_after_rank3, corpus_gold)))
 
-    print((R0e, R1e, R2e, R3e))
+    print("--------R0 rules------")
+    for r in R0f:
+        print(f"{r} :\n {R0f[r]}")
+    print("--------R1 rules------")
+    for r in R1e:
+        print(f"{r} :\n {R1e[r]}")
+    print("--------R2 rules------")
+    for r in R2e:
+        print(f"{r} :\n {R2e[r]}")
+    print("--------R3 rules------")
+    for r in R3e:
+        print(f"{r} :\n {R3e[r]}")
