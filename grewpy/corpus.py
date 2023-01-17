@@ -53,7 +53,7 @@ class CorpusDraft(dict):
         if isinstance(data, slice):
             return [self[sid] for sid in self._sent_ids[data]]
 
-    def map(self, fun):
+    def apply(self, fun):
         """
         Apply fun to all graphs, return the new Corpus
         """
@@ -155,7 +155,7 @@ class Corpus:
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=True):
+    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=False):
         """
         Search for [request] into [corpus_index]
 
