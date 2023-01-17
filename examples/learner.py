@@ -12,6 +12,74 @@ sys.path.insert(0, os.path.abspath(os.path.join( os.path.dirname(__file__), "../
 from grewpy import Corpus, GRS, set_config
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Graph
 
+working_symbols = ["LEFT_SPAN", "RIGHT_SPAN", "ANCESTOR"]
+is_working = re.compile("|".join(working_symbols))
+
+class Sketch:
+    def __init__(self, P, cluster_criterion, sketch_name):
+        """
+        sketches are defined by a pattern, and parameters (features, edge features, etc)
+        sketch name serves for rule naming
+        Nodes X and Y have special status. 
+        In the following, we search for 'e : X -> Y'
+        Thus, in the pattern P, X, Y, e must be used with that fact in mind.
+        cluster criterion is typically ["X.upos", "Y.upos"], but can be enlarged  
+        """
+        self.P = P
+        self.cluster_criterion = cluster_criterion
+        self.sketch_name = sketch_name
+    
+    def cluster(self, corpus):
+        """
+        search for a link X -> Y with respect to the sketch in the corpus
+        we build a cluster depending on cluster criterion (e.g. X.upos, Y.upos)
+        """
+        P1 = Request(self.P, f'e:X-> Y', 'e.rank="_"')
+        obs = corpus.count(P1, self.cluster_criterion, ["e.label"], True)
+        if not obs:
+            return obs
+        W1 = Request(self.P).without(f"X -[^{'|'.join(working_symbols)}]-> Y")
+        clus = corpus.count(W1, self.cluster_criterion, [], True)
+        for L in obs:
+            if L in clus:
+                obs[L][''] = clus[L]
+        return obs
+    
+    def build_rules(self, corpus, param, rank_level=0):
+        """
+        search a rule adding an edge X -> Y, given a sketch  
+        we build the clusters, then
+        for each pair (X, upos=U1), (Y, upos=U2), we search for 
+        some edge e occuring at least with probability base_threshold
+        in which case, we define a rule R: 
+        base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
+        """
+        def crit_to_request(crit, val):
+            if ".label" in crit:
+                edge_name = re.match("(.*?).label", crit).group(1)
+                clauses = []
+                for it in val.split(","):
+                    a, b = it.split("=")
+                    clauses.append(f'{edge_name}.{a}="{b}"')
+                return ";".join(clauses)
+            return f"{crit}={val}"
+        rules = dict()
+        rule_eval = dict()
+        obslr = self.cluster(corpus)
+        for L in obslr:
+            x, p = obslr.anomaly(L, param["base_threshold"])
+            if x:
+                extra_pattern = ";".join(crit_to_request(crit, val)
+                                     for (crit, val) in zip(self.cluster_criterion, L))
+                P = Request(self.P, extra_pattern)
+                x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
+                c = Add_edge("X", x, "Y")
+                R = Rule(P, Commands(c))
+                rn = re.sub("[.,=\"]", "", f"_{'_'.join(L)}_{self.sketch_name}")
+                rules[rn] = R
+                rule_eval[rn] = (x, p)
+        return rules, rule_eval
+
 def remove_rank(e):
     return tuple(sorted(list((k,v) for k,v in e.items() if k != "rank")))
 
@@ -20,9 +88,9 @@ def edge_equal_up_to_rank(e1,e2):
 
 def diff(g1,g2):
     E1 = g1.triples()
-    E1b = {(n,remove_rank(e),s) for (n,e,s) in E1 if "SPAN" not in e["1"]}
+    E1b = {(n,remove_rank(e),s) for (n,e,s) in E1 if not is_working.search(e["1"])}
     E2 = g2.triples()
-    E2b = {(n,remove_rank(e),s) for (n,e,s) in E2 if "SPAN" not in e["1"]}
+    E2b = {(n,remove_rank(e),s) for (n,e,s) in E2 if not is_working.search(e["1"])}
     return np.array([len(E1b & E2b), len(E1b - E2b), len(E2b - E1b)])
 
 def diff_corpus_rank(c1,c2):
@@ -38,112 +106,6 @@ def diff_corpus_rank(c1,c2):
         "recall": round(recall, 3),
         "f_measure": round(f_measure, 3),
     }
-
-class Observation:
-    """
-    maps a tuple of criteria to a dict mapping edge -> nb of observation
-    """
-    @staticmethod
-    def _enumerate(obs, crit, L):
-        if not obs:
-            return
-        if not crit:
-            yield (L, obs)
-        else:
-            for k in obs:
-                yield from Observation._enumerate(obs[k], crit[1:],L + (k,))
-
-    def __init__(self, obs, criterion):
-        self.obs = {L : v for L,v in Observation._enumerate(obs, criterion, tuple())}
-
-    def __iter__(self):
-        return iter(self.obs)
-    def __getitem__(self, k):
-        return self.obs[k]
-    def __bool__(self):
-        return bool(self.obs)
-
-    def anomaly(self, L,  param):
-        """
-        L is a key within self
-        return for L an edge and its associated probability if beyond base_threshold
-        """
-        s = sum(self.obs[L].values())
-        for x, v in self.obs[L].items():
-            if v > param["base_threshold"] * s and x:
-                return x, v/s
-        return None, None
-        
-def cluster(corpus : Corpus, P : Request, cluster_criterion) -> Observation:
-    """
-    search for a link X -> Y with respect to pattern P in the corpus
-    we build a cluster depending on X.upos and Y.upos
-    """
-    P1 = Request(P, f'e:X-> Y', 'e.rank="_"')
-    obs = Observation(corpus.count(P1, cluster_criterion + ["e.label"]), cluster_criterion)
-    if not obs:
-        return obs
-    W1 = Request(P).without(f"X -[^LEFT_SPAN|RIGHT_SPAN]-> Y")
-    clus = Observation(corpus.count(W1, cluster_criterion), cluster_criterion)
-    for L in obs:
-        if L in clus:
-            obs[L][''] = clus[L]
-    return obs
-
-
-def build_rules(base_pattern, rules : GRSDraft, corpus : Corpus, rule_name, rule_eval, param, cluster_criterion,rank_level=0):
-    """
-    search a rule adding an edge X -> Y, given a base_pattern  
-    we build the clusters, then
-    for each pair (X, upos=U1), (Y, upos=U2), we search for 
-    some edge e occuring at least with probability base_threshold
-    in which case, we define a rule R: 
-    base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
-    """
-    def crit_to_request(crit,val):
-        if ".label" in crit:
-            edge_name = re.match("(.*?).label", crit).group(1)
-            clauses = []
-            for it in val.split(","):
-                a, b = it.split("=")
-                clauses.append(f'{edge_name}.{a}="{b}"')
-            return ";".join(clauses)
-        return f"{crit}={val}"
-    obslr = cluster(corpus, base_pattern, cluster_criterion)
-    for L in obslr:
-        x,p = obslr.anomaly(L, param)
-        if x:
-            extra_pattern = ";".join(crit_to_request(crit,val) for (crit,val) in zip(cluster_criterion,L))
-            P = Request(base_pattern, extra_pattern)
-            x = x.replace(f"rank=_",f'rank="{rank_level}"')
-            c = Add_edge("X",x,"Y")
-            R = Rule(P, Commands( c))
-            rn = re.sub("[.,=\"]", "", f"_{'_'.join(L)}_{rule_name}")#f"_{'_'.join(L)}_{rule_name}"
-            rules[rn] = R
-            rule_eval[rn] = (x,p)
-
-def rank0(corpus : Corpus, param) -> GRSDraft:
-    """
-    build all rank 0 rules. They are supposed to connect words at distance 1
-    """
-    rules = GRSDraft()
-    rule_eval = dict() #eval of the rule, same keys as rules
-    build_rules("X[];Y[];X<Y", rules, corpus, "lr", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules("X[];Y[];Y<X", rules, corpus, "rl", rule_eval, param, ["X.upos","Y.upos"])
-    return rules, rule_eval
-
-def span_rules(corpus, param):
-    rules = GRSDraft()
-    rule_eval = dict()
-    span = "LEFT_SPAN|RIGHT_SPAN"
-    build_rules(f"X[];Y[];X -[{span}]->Z;Z<Y", rules, corpus, "span_Zlr", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];X -[{span}]->Z;Y<Z", rules, corpus, "span_Zrl", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];Y -[{span}]->T;X<T",rules, corpus, "span_Tlr", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];Y -[{span}]->T;T<X", rules, corpus, "spanT_rl", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;Z<T", rules, corpus, "span_ZTlr", rule_eval, param, ["X.upos","Y.upos"])
-    build_rules(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z", rules, corpus, "span_ZTrl", rule_eval, param, ["X.upos","Y.upos"])
-    return rules, rule_eval
-
 
 def nofilter(k,v,param):
     """
@@ -338,13 +300,26 @@ def corpus_span(corpus):
     draft = CorpusDraft(corpus)
     return Corpus(draft.map(add_span))
 
-def corpus_remove_edges_but_span(corpus):
+def corpus_ancestor(corpus):
+    def add_ancestor_relation(g):
+        todo = [(i,i) for i in g]
+        while todo:
+            n,m = todo.pop()
+            for s, e in g.sucs[m]:
+                if not is_working.search(str(e)):
+                    g.sucs[n].append((s,{"1":"ANCESTOR"}))
+                    todo.append((n,s))
+        return g
+    draft = CorpusDraft(corpus)
+    return Corpus(draft.map(add_ancestor_relation))
+
+def corpus_remove_edges_but_working(corpus):
     """
     remove edges but spans within corpus
     """
     def clear_but_span(g):
         for n in g.sucs:
-            g.sucs[n] = [(s,e) for (s,e) in g.sucs[n] if "SPAN" in e.get("1","")]
+            g.sucs[n] = [(s,e) for (s,e) in g.sucs[n] if is_working.search(e.get("1",""))]
         return (g)
     return Corpus(CorpusDraft(corpus).map(clear_but_span))
 
@@ -432,6 +407,57 @@ def remove_wrong_edges(corpus, corpus_gold):
                     g_corp.sucs[n].append((m,e))
     return new_corpus
 
+def rank0(corpus : Corpus, param) -> GRSDraft:
+    """
+    build all rank 0 rules. They are supposed to connect words at distance 1
+    """
+    rules = GRSDraft()
+    rule_eval = dict() #eval of the rule, same keys as rules
+    s1 = Sketch(Request("X[];Y[];X<Y"), ["X.upos", "Y.upos"], "adjacent_lr")
+    s2 = Sketch(Request("X[];Y[];Y<X"), ["X.upos", "Y.upos"], 'adjacent_rl')
+    for s in [s1,s2]:
+        rs, res = s.build_rules(corpus, param)
+        rules |= rs
+        rule_eval |= res
+    return rules, rule_eval
+
+def span_rules(corpus, param):
+    def span_sketch(request, name):
+        return Sketch(request.without("X<Y").without("Y<X"), ["X.upos", "Y.upos"], name)
+    rules = GRSDraft()
+    rule_eval = dict()
+    span = "LEFT_SPAN|RIGHT_SPAN"
+    sketches = []
+    sketches.append(span_sketch(Request(f"X[];Y[];X -[LEFT_SPAN]->Z;Z<Y;"), "span_Zlr"))
+    sketches.append(span_sketch(Request(f"X[];Y[];X -[RIGHT_SPAN]->Z;Y<Z"), "span_Zrl"))
+    sketches.append(span_sketch(Request(f"X[];Y[];Y -[{span}]->T;X<T"), "spanT_lr"))
+    sketches.append(span_sketch(Request(f"X[];Y[];Y -[{span}]->T;T<X"), "span_Trl"))
+    sketches.append(span_sketch(Request(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;Z<T"), "span_ZTlr"))
+    sketches.append(span_sketch(Request(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z"), "span_ZTrl"))
+    for sketch in sketches:
+        rs, re = sketch.build_rules(corpus, param)
+        rules |= rs
+        rule_eval |= re
+    return rules, rule_eval
+
+def ancestor_rules(corpus, param):
+    sketches = []
+    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Z<Y"), ["X.upos", "Y.upos"], "ancestor_zy"))
+    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Y<Z"), ["X.upos", "Y.upos"], "ancestor_yz"))
+    sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;Z<X"), ["X.upos", "Y.upos"], "ancestor_zx"))
+    sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;X<Z"), ["X.upos", "Y.upos"], "ancestor_xz"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Z<Y"), ["X.upos", "Y.upos"], "zy_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Y<Z"), ["X.upos", "Y.upos"], "yz_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;Z<X"), ["X.upos", "Y.upos"], "zx_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;X<Z"), ["X.upos", "Y.upos"], "xz_ancestor"))
+    rules = GRSDraft()
+    rule_eval = dict()
+    for sketch in sketches:
+        rs, re = sketch.build_rules(corpus, param)
+        rules |= rs
+        rule_eval |= re
+    return rules, rule_eval
+
 
 def rank_n_plus_one(corpus_gold, param, rank_n):
     """
@@ -442,10 +468,14 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
     corpus = Corpus(corpus_gold)
     nodes = ['f:X -> Z', 'f:Y -> Z','f:Z->X','f:Z->Y']
     ordres = ['X<Y','X>Y','Z<Y','Z>Y','X<Z','X>Z']
+    cpt = 1
     for ns in nodes:
         for o in ordres:
-            pat = f'X[];Y[];{ns};{o};f.rank="{rank_n}"'
-            build_rules(pat, rules, corpus, '1lr', rule_eval, param, ["X.upos","Y.upos","f.label"], rank_n+1)
+            sketch = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank_n}"'), ["X.upos","Y.upos","f.label"], f"rank_{cpt}_{rank_n}")
+            rs, re = sketch.build_rules(corpus, param, rank_n+1)
+            rules |= rs
+            rule_eval |= re
+            cpt += 1
 
     """
     span = ['X -[LEFT_SPAN|RIGHT_SPAN]->T;Y-[LEFT_SPAN|RIGHT_SPAN]->U;U<T','X -[LEFT_SPAN|RIGHT_SPAN]->T;Y-[LEFT_SPAN|RIGHT_SPAN]->U;T<U']
@@ -456,8 +486,6 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
                         "X.upos", "Y.upos", "f.label"], rank_n+1)
     """     
     return rules, rule_eval
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
@@ -482,22 +510,23 @@ if __name__ == "__main__":
         "node_impurity" : 0.2,
         "number_of_extra_leaves" : 5
     }
-    
     corpus_gold = Corpus (args.train)
     corpus_gold = init_rank(corpus_gold) #rank label on edges
     corpus_gold = corpus_span(corpus_gold)# span
-    corpus_empty = corpus_remove_edges_but_span(corpus_gold)
+    corpus_gold = corpus_ancestor(corpus_gold)
+
+    corpus_empty = corpus_remove_edges_but_working(corpus_gold)
 
     corpus_gold_eval = Corpus(args.eval)
     corpus_gold_eval = init_rank(corpus_gold_eval)
     corpus_gold_eval = corpus_span(corpus_gold_eval)
-    corpus_empty_eval = corpus_remove_edges_but_span(corpus_gold_eval)
+    corpus_empty_eval = corpus_remove_edges_but_working(corpus_gold_eval)
     
     R0, rule_eval = rank0(corpus_gold, param)        
-    A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'), [])
-    A += corpus_gold.count(Request('Y<X;e:X->Y;e.rank="_"'), [])
+    A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'))
+    A += corpus_gold.count(Request('Y<X;e:X->Y;e.rank="_"'))
     print("---target----")
-    print(f"""number of edges within corpus {corpus_gold.count(Request('e: X -> Y;e.rank="_"'),[])}""")
+    print(f"""number of edges within corpus {corpus_gold.count(Request('e: X -> Y;e.rank="_"'))}""")
     print(f"number of adjacent relations: {A}")
     print(f"adjacent rules before refinement: len(R0) = {len(R0)}")
     R0_test = GRS(R0.safe_rules().onf()) 
@@ -519,8 +548,15 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, Rs0e_t)
     print(diff_corpus_rank(c,corpus_gold))
 
+    Ra0, raeval = ancestor_rules(corpus_gold, param)
+    Rae0 = refine_rules(Ra0, raeval, corpus_gold, param, 0)
+    Ra0e_t = GRS(Rae0.safe_rules().onf())
+    print(f"ancestor rules after refinement {len(Rae0)}")
+    c = get_best_solution(corpus_gold, corpus_empty, Ra0e_t)
+    print(diff_corpus_rank(c, corpus_gold))
+
     #union of adjacent rules and span rules
-    R0f = GRSDraft(R0e | Rs0e)
+    R0f = GRSDraft(R0e | Rs0e | Rae0)
     R0f_t = GRS(R0f.safe_rules().onf())
     computed_corpus_after_rank0 = get_best_solution(corpus_gold, corpus_empty, R0f_t)
     print(diff_corpus_rank(computed_corpus_after_rank0, corpus_gold))
@@ -531,7 +567,7 @@ if __name__ == "__main__":
     R1e_t = GRS(R1e.safe_rules().onf())
     computed_corpus_after_rank1 = get_best_solution(corpus_gold, computed_corpus_after_rank0, R1e_t)
     print(f"-----------Rank 1 rules : {len(R1e)}")
-    print((diff_corpus_rank(computed_corpus_after_rank1,corpus_gold)))
+    print((diff_corpus_rank(computed_corpus_after_rank1, corpus_gold)))
 
     corpus_gold_after_rank1 = update_gold_rank(corpus_gold,computed_corpus_after_rank1)
     R2, R2_eval = rank_n_plus_one(corpus_gold_after_rank1, param, 1)
@@ -565,13 +601,12 @@ if __name__ == "__main__":
     print(diff_corpus_rank(corpus_eval_after_r2, corpus_gold_eval))
     corpus_filtered_after_r2 = remove_wrong_edges(corpus_eval_after_r2, corpus_gold_eval)
 
-    corpus_eval_after_r3 = get_best_solution(corpus_gold_eval, corpus_filtered_after_r2, R3e_t)
+    corpus_eval_after_r3 = get_best_solution(
+        corpus_gold_eval, corpus_filtered_after_r2, R3e_t)
     print("--------at rank 3-------------")
     print(diff_corpus_rank(corpus_eval_after_r3, corpus_gold_eval))
     corpus_filtered_after_r3 = remove_wrong_edges(corpus_eval_after_r3, corpus_gold_eval)
 
-
-"""
     print("--------R0 rules------")
     for r in R0f:
         print(f"{r} :\n {R0f[r]}")
@@ -584,5 +619,3 @@ if __name__ == "__main__":
     print("--------R3 rules------")
     for r in R3e:
         print(f"{r} :\n {R3e[r]}")
-"""
-

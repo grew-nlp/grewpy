@@ -13,6 +13,7 @@ import numpy as np
 from .network import send_and_receive
 from .graph import Graph
 from .grew import GrewError
+from .observation import Observation
 from . import network
 
 
@@ -154,7 +155,7 @@ class Corpus:
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_keys=[]):
+    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=True):
         """
         Search for [request] into [corpus_index]
 
@@ -165,26 +166,36 @@ class Corpus:
         Returns:
         list: the list of matching of [request] into the corpus
         """
-        return network.send_and_receive({
+        res = network.send_and_receive({
             "command": "corpus_search",
             "corpus_index": self._id,
             "request": request.json_data(),
-            "clustering_keys": clustering_keys,
+            "clustering_keys": clustering_parameter + clustering_keys
         })
+        if not flat:
+            return res
+        if clustering_parameter or clustering_keys:
+            return Observation(res, clustering_parameter, clustering_keys)
+        return res
 
-    def count(self, request, clustering_keys=[]):
+    def count(self, request, clustering_parameter=[], clustering_keys=[], flat=False):
         """
         Count for [request] into [corpus_index]
         :param request: a string request
         :param corpus_index: an integer given by the [corpus] function
         :return: the number of matching of [request] into the corpus
         """
-        return network.send_and_receive({
+        res = network.send_and_receive({
             "command": "corpus_count",
             "corpus_index": self._id,
             "request": request.json_data(),
-            "clustering_keys": clustering_keys,
+            "clustering_keys": clustering_parameter + clustering_keys,
         })
+        if not flat:
+            return res
+        if clustering_parameter or clustering_keys:
+            return Observation(res, clustering_parameter, clustering_keys)
+        return res
 
     def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):
         """
