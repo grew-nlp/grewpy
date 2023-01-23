@@ -30,7 +30,10 @@ class CorpusDraft(dict):
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
-        if isinstance(data, dict):
+        if isinstance(data, CorpusDraft):
+            T = {sid: Graph(data[sid]) for sid in data}
+            super().__init__(T)
+        elif isinstance(data, dict):
             super().__init__(data)
         elif data == None:
             super().__init__()
@@ -76,6 +79,7 @@ class CorpusDraft(dict):
             "recall": round(recall, 3),
             "f_measure": round(f_measure, 3),
         }
+
 
 
 

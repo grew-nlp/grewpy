@@ -1,9 +1,3 @@
-# Use local grew lib
-import os, sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
-
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Graph
-from grewpy import Corpus, GRS, set_config
 import matplotlib.pyplot as plt
 from sklearn import tree
 from sklearn.tree import DecisionTreeClassifier
@@ -12,6 +6,13 @@ import numpy as np
 import pickle
 import re
 import argparse
+
+# Use local grew lib
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
+
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Graph
+from grewpy import Corpus, GRS, set_config
 
 
 WORKING_SYMBOLS = ["LEFT_SPAN", "RIGHT_SPAN", "ANCESTOR"]
@@ -620,10 +621,10 @@ if __name__ == "__main__":
     print("------Now testing on the evaluation corpus----------")
     corpus_gold_eval = CorpusDraft(args.eval)
     corpus_gold_eval = corpus_gold_eval.apply(add_rank)
-    corpus_gold_eval = corpus_gold.map(add_span)
-    corpus_empty_eval = Corpus(CorpusDraft(corpus_gold).apply(clear_but_working))
-    corpus_eval_after_r0 = get_best_solution(
-        corpus_gold_eval, corpus_empty_eval, R0f_t)
+    corpus_gold_eval = corpus_gold_eval.apply(add_span)
+    corpus_empty_eval = Corpus(CorpusDraft(corpus_gold_eval).apply(clear_but_working))
+    corpus_eval_after_r0 = get_best_solution(corpus_gold_eval, corpus_empty_eval, R0f_t)
+
     print("--------at rank 0-------------")
     print(diff_corpus_rank(corpus_eval_after_r0, corpus_gold_eval))
     corpus_filtered_after_r0 = remove_wrong_edges(
