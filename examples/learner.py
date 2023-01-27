@@ -91,9 +91,11 @@ class Sketch:
         for L in obslr:
             x, p = obslr.anomaly(L, param["base_threshold"])
             if x:
-                extra_pattern = ";".join(crit_to_request(crit, val)
-                                         for (crit, val) in zip(self.cluster_criterion, L))
-                P = Request(self.P, extra_pattern)
+                extra_pattern = [crit_to_request(crit, val) for (crit, val) in zip(self.cluster_criterion, L)]
+                P = Request(self.P, *extra_pattern)
+                if 'ANCESTOR' in x[0]:
+                    zzz = 33
+
                 x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
                 c = Add_edge("X", x, "Y")
                 R = Rule(P, Commands(c))
@@ -160,8 +162,7 @@ def get_tree(X, y, param):
     if max(y) == 0:
         return None
     clf = DecisionTreeClassifier(max_depth=param["max_depth"],
-                                 max_leaf_nodes=max(
-                                     y)+param["number_of_extra_leaves"],
+                                 max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
                                  min_samples_leaf=param["min_samples_leaf"],
                                  criterion="gini")
     clf.fit(X, y)
@@ -170,7 +171,7 @@ def get_tree(X, y, param):
 
 def fvs(matchings, corpus, param):
     """
-    return the set of (Z,feature,values) of nodes Z=X, Y in the matchings
+    return the set of (Z,feature,values) with Z=X, Y in the matchings
     within the corpus. param serves to filter meaningful features values
     """
     features = {'X': dict(), 'Y': dict()}
@@ -212,11 +213,16 @@ def create_classifier(matchings, pos, corpus, param):
             for k, v in feat.items():
                 if (n, k, v) in pos:
                     obs[pos[(n, k, v)]] = 1
-        e = graph.edge(nodes['X'], nodes['Y'])
-        if e not in y1:
-            y1[e] = len(y1)
-        y.append(y1[e])
-        X.append(obs)
+        es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
+        if len(es) > 1:
+            print("mmmm")
+        elif len(es) <= 1:
+            e = es.pop() if es else None
+            if e not in y1:
+                y1[e] = len(y1)
+            y.append(y1[e])
+            X.append(obs)
+
 
     return get_tree(X, y, param), {y1[i]: i for i in y1}
 
@@ -447,17 +453,29 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     build all adjacent rules. They are supposed to connect words at distance 1
     """
     rules = WorkingGRS()
-    rule_eval = dict()  # eval of the rule, same keys as rules
-    s1 = Sketch(Request("X[];Y[];X<Y"), ["X.upos", "Y.upos"], "adjacent_lr")
-    s2 = Sketch(Request("X[];Y[];Y<X"), ["X.upos", "Y.upos"], 'adjacent_rl')
-    for s in [s1, s2]:
+    sadj =[]
+    sadj.append( Sketch(Request("X[];Y[];X<Y"), ["X.upos", "Y.upos"], "adjacent_lr") )
+    sadj.append( Sketch(Request("X[];Y[];Y<X"), ["X.upos", "Y.upos"], 'adjacent_rl') )
+    sadj.append( Sketch(Request("X[];Y[];Z[];X<Z;Z<Y"), ["X.upos", "Y.upos"], "adjacent2_lr") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<Z;Z<X"), ["X.upos", "Y.upos"], 'adjacent2_rl') )
+    #sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;X.upos=Z.upos"),["X.upos", "Y.upos"], "no_intermediate_lr3") )
+    #sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr4") )
+    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("X<<Z;Z<<Y;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr5") )
+    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6") )
+    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr7") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<<X").without("Y<<Z;Z<<X;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr8") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr7") )
+    sadj.append(Sketch(Request("X[];Y[];Z[];Y<<X").without("Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr9"))
+    sadj.append(Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6"))
+
+    for s in sadj:
         rules |= s.build_rules(corpus, param)
     return rules
 
 
 def span_rules(corpus, param):
     def span_sketch(request, name):
-        return Sketch(request.without("X<Y").without("Y<X"), ["X.upos", "Y.upos"], name)
+        return Sketch(request, ["X.upos", "Y.upos"], name)
     rules = WorkingGRS()
     span = "LEFT_SPAN|RIGHT_SPAN"
     sketches = []
