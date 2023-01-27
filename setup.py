@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='grewpy',
-    version='0.1.1',
+    version='0.1.2',
     packages=['grewpy','examples'],
     license='LICENSE/Licence_CeCILL_V2-en.txt',
     description="A binding to the Grew software",
