@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"
 
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Graph
 from grewpy import Corpus, GRS, set_config
+from grewpy.observation import Observation
 
 
 WORKING_SYMBOLS = ["LEFT_SPAN", "RIGHT_SPAN", "ANCESTOR"]
@@ -65,10 +66,10 @@ class Sketch:
         clus = corpus.count(W1, self.cluster_criterion, [], True)
         for L in obs:
             if L in clus:
-                obs[L][''] = clus[L]
+                obs[L][''] = clus[L][tuple()]
         return obs
 
-    def build_rules(self, corpus, param, rank_level=0):
+    def build_rules(self, observation, param, rank_level=0):
         """
         search a rule adding an edge X -> Y, given a sketch  
         we build the clusters, then
@@ -87,20 +88,15 @@ class Sketch:
                 return ";".join(clauses)
             return f"{crit}={val}"
         rules = WorkingGRS()
-        obslr = self.cluster(corpus)
-        for L in obslr:
-            x, p = obslr.anomaly(L, param["base_threshold"])
+        for parameter in observation:
+            x, p = observation.anomaly(parameter, param["base_threshold"])
             if x:
-                extra_pattern = [crit_to_request(crit, val) for (crit, val) in zip(self.cluster_criterion, L)]
+                extra_pattern = [crit_to_request(crit, val) for (crit, val) in zip(self.cluster_criterion, parameter)]
                 P = Request(self.P, *extra_pattern)
-                if 'ANCESTOR' in x[0]:
-                    zzz = 33
-
                 x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
                 c = Add_edge("X", x, "Y")
                 R = Rule(P, Commands(c))
-                rn = re.sub("[.,=\"]", "",
-                            f"_{'_'.join(L)}_{self.sketch_name}")
+                rn = re.sub("[.,=\"]", "",f"_{'_'.join(parameter)}_{self.sketch_name}")
                 rules[rn] = (R, (x, p))
         return rules
 
@@ -454,69 +450,61 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     """
     rules = WorkingGRS()
     sadj =[]
+    #sadj.append( Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr8") )
+     
     sadj.append( Sketch(Request("X[];Y[];X<Y"), ["X.upos", "Y.upos"], "adjacent_lr") )
     sadj.append( Sketch(Request("X[];Y[];Y<X"), ["X.upos", "Y.upos"], 'adjacent_rl') )
-    sadj.append( Sketch(Request("X[];Y[];Z[];X<Z;Z<Y"), ["X.upos", "Y.upos"], "adjacent2_lr") )
-    sadj.append( Sketch(Request("X[];Y[];Z[];Y<Z;Z<X"), ["X.upos", "Y.upos"], 'adjacent2_rl') )
-    #sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;X.upos=Z.upos"),["X.upos", "Y.upos"], "no_intermediate_lr3") )
-    #sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr4") )
-    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("X<<Z;Z<<Y;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr5") )
-    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6") )
-    #sadj.append( Sketch(Request("X[];Y[];Z[]").without("Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr7") )
-    sadj.append( Sketch(Request("X[];Y[];Z[];Y<<X").without("Y<<Z;Z<<X;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr8") )
+    sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;X.upos=Z.upos"),["X.upos", "Y.upos"], "no_intermediate_lr3") )
+    sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr4") )
+    sadj.append( Sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr5") )
+    sadj.append( Sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6") )
+    """
+    sadj.append( Sketch(Request("X[];Y[];Z[];X<Z;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], "adjacent1_lr") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<Z;Z<X"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent2_rl') )
+    sadj.append( Sketch(Request("X[];Y[];Z[];X<Y;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "adjacent3_lr") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent4_rl') )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;X<Z"), ["X.upos", "Y.upos", "Z.upos"], "adjacent5_lr") )
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent6_rl') )
+    
+    
     sadj.append( Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr7") )
     sadj.append(Sketch(Request("X[];Y[];Z[];Y<<X").without("Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr9"))
     sadj.append(Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6"))
-
+"""
     for s in sadj:
-        rules |= s.build_rules(corpus, param)
+        rules |= s.build_rules(s.cluster(corpus), param)
     return rules
 
 
 def span_rules(corpus, param):
-    def span_sketch(request, name):
-        return Sketch(request, ["X.upos", "Y.upos"], name)
     rules = WorkingGRS()
-    span = "LEFT_SPAN|RIGHT_SPAN"
     sketches = []
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];X -[LEFT_SPAN]->Z;Z<Y;"), "span_Zlr"))
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];X -[RIGHT_SPAN]->Z;Y<Z"), "span_Zrl"))
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];Y -[{span}]->T;X<T"), "spanT_lr"))
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];Y -[{span}]->T;T<X"), "span_Trl"))
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;Z<T"), "span_ZTlr"))
-    sketches.append(span_sketch(
-        Request(f"X[];Y[];Y -[{span}]->T;X-[{span}]->Z;T<Z"), "span_ZTrl"))
+    sketches.append(Sketch(Request("X[];Y[];X -[LEFT_SPAN]->Z;Z<Y;"), ["X.upos", "Y.upos", "Z.upos"], "span_Zlr"))
+    sketches.append(Sketch(Request("X[];Y[];X -[RIGHT_SPAN]->Z;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "span_Zrl"))
+    sketches.append(Sketch(Request("X[];Y[];Y -[LEFT_SPAN]->T;X<T"), ["X.upos", "Y.upos", "T.upos"], "spanT1"))
+    sketches.append(Sketch(Request("X[];Y[];Y -[RIGHT_SPAN]->T;T<X"), ["X.upos", "Y.upos", "T.upos"], "spanT4"))
+    sketches.append(Sketch(Request("X[];Y[];Y -[LEFT_SPAN]->T;X-[LEFT_SPAN]->Z;Z<T"), ["X.upos", "Y.upos"], "span_ZTlr"))
+    sketches.append(Sketch(Request("X[];Y[];Y -[RIGHT_SPAN]->T;X-[RIGHT_SPAN]->Z;T<Z"), ["X.upos", "Y.upos"], "span_ZTlr"))
     for sketch in sketches:
-        rules |= sketch.build_rules(corpus, param)
+        rules |= sketch.build_rules(sketch.cluster(corpus), param)
     return rules
 
 
 def ancestor_rules(corpus, param):
     sketches = []
-    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Z<Y"),
-                    ["X.upos", "Y.upos"], "ancestor_zy"))
-    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Y<Z"),
-                    ["X.upos", "Y.upos"], "ancestor_yz"))
-    sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;Z<X"),
-                    ["X.upos", "Y.upos"], "ancestor_zx"))
-    sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;X<Z"),
-                    ["X.upos", "Y.upos"], "ancestor_xz"))
-    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Z<Y"),
-                    ["X.upos", "Y.upos"], "zy_ancestor"))
-    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Y<Z"),
-                    ["X.upos", "Y.upos"], "yz_ancestor"))
-    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;Z<X"),
-                    ["X.upos", "Y.upos"], "zx_ancestor"))
-    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;X<Z"),
-                    ["X.upos", "Y.upos"], "xz_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], "ancestor_zy"))
+    sketches.append(Sketch(Request("X[];Y[];X-[ANCESTOR]->Z;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "ancestor_yz"))
+    #sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;Z<X"), ["X.upos", "Y.upos", "Z.upos"], "ancestor_zx"))
+    sketches.append(Sketch(Request("X[];Y[];Y-[ANCESTOR]->Z;X<Z"), ["X.upos", "Y.upos", 'Z.upos'], "ancestor_xz"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], "zy_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "yz_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;Z<X"), ["X.upos", "Y.upos", "Z.upos"], "zx_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;X<Z"), ["X.upos", "Y.upos", "Z.upos"], "xz_ancestor"))
+    sketches.append(Sketch(Request("X[];Y[];X<T;Y-[LEFT_SPAN]->T"), ["X.upos", "Y.upos"], "span_ancestor_zy"))
+    sketches.append(Sketch(Request("X[];Y[];T<X;Y-[RIGHT_SPAN]->T"), ["X.upos", "Y.upos"], "span_ancestor_yz"))
     rules = WorkingGRS()
     for sketch in sketches:
-        rules |= sketch.build_rules(corpus, param)
+        rules |= sketch.build_rules(sketch.cluster(corpus), param)
     return rules
 
 
@@ -531,10 +519,15 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
     cpt = 1
     for ns in nodes:
         for o in ordres:
-            sketch = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank_n}"'), [
-                            "X.upos", "Y.upos", "f.label"], f"rank_{cpt}_{rank_n}")
-            rules |= sketch.build_rules(corpus, param, rank_n+1)
-            cpt += 1
+            observations = Observation()
+            for rank in range(0,rank_n+1):
+                sketch = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank}"'), 
+                ["X.upos", "Y.upos", "f.label"], f"rank_{cpt}_{rank_n}")
+                observations |= sketch.cluster(corpus)
+                cpt += 1
+            sketch = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank_n}"'),
+                            ["X.upos", "Y.upos", "f.label"], f"rank_{cpt}_{rank_n}")
+            rules |= sketch.build_rules(observations, param, rank_n+1)
     return rules
 
 
@@ -640,6 +633,7 @@ if __name__ == "__main__":
     corpus_gold_eval = CorpusDraft(args.eval)
     corpus_gold_eval = corpus_gold_eval.apply(add_rank)
     corpus_gold_eval = corpus_gold_eval.apply(add_span)
+    corpus_gold_eval = Corpus(corpus_gold_eval.apply(add_ancestor_relation)) 
     corpus_empty_eval = Corpus(CorpusDraft(corpus_gold_eval).apply(clear_but_working))
     corpus_eval_after_r0 = get_best_solution(corpus_gold_eval, corpus_empty_eval, R0f_t)
 
@@ -669,6 +663,7 @@ if __name__ == "__main__":
     corpus_filtered_after_r3 = remove_wrong_edges(
         corpus_eval_after_r3, corpus_gold_eval)
 
+    """
     print("--------R0 rules------")
     for r in R0f:
         print(f"{r} :\n {R0f[r]}")
@@ -681,3 +676,4 @@ if __name__ == "__main__":
     print("--------R3 rules------")
     for r in R3e:
         print(f"{r} :\n {R3e[r]}")
+"""

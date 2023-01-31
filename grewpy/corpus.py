@@ -198,7 +198,7 @@ class Corpus:
         if not flat:
             return res
         if clustering_parameter or clustering_keys:
-            return Observation(res, clustering_parameter, clustering_keys)
+            return Observation(obs=res,parameter=clustering_parameter, keys=clustering_keys)
         return res
 
     def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):

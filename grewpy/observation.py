@@ -14,18 +14,27 @@ class Observation:
                     yield from _flatten(obs[k], crit[1:], L + (k,))
         return {L : v for L, v in _flatten(obs, crit, tuple())}
 
-    def __init__(self, obs, parameter, keys):
-        if parameter:
-            intermediate = Observation.flatten(obs, parameter)
-            if keys:
-                self.obs = {L : Observation.flatten(V, keys) for L,V in intermediate.items()}
+    def __init__(self, **kwargs):
+        if "obs" in kwargs:
+            if "parameter" in kwargs:
+                intermediate = Observation.flatten(kwargs["obs"], kwargs["parameter"])
+            if "keys" in kwargs:
+                self.obs = {L : Observation.flatten(V, kwargs["keys"]) for L,V in intermediate.items()}
             else:
                 self.obs = intermediate
         else:
-            if keys:
-                self.obs = Observation.flatten(obs, keys)
-            else:
-                self.obs = obs
+            self.obs = dict()
+
+
+    def __ior__(self, other):
+        for parameter_keys in other.obs:
+            if parameter_keys not in self.obs:
+                self.obs[parameter_keys] = dict()
+            for observation_keys in other.obs[parameter_keys]:
+                if observation_keys not in self.obs[parameter_keys]:
+                    self.obs[parameter_keys][observation_keys] = 0
+                self.obs[parameter_keys][observation_keys] += other.obs[parameter_keys][observation_keys]
+        return self
 
     def __iter__(self):
         return iter(self.obs)
