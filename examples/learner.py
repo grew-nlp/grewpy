@@ -185,7 +185,7 @@ def zipf(observation, n, k, param):
     """
     output the list of feature values of interest
     """
-    if len(observation[(n,k)]) < 2:
+    if len(observation[(n,k)]) < 1:
         return [] #no values or 1 is not sufficient
     values = list(observation[(n,k)].keys())
     values.sort(reverse=True)
@@ -555,6 +555,15 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
             rules |= sketch.build_rules(observations, param, rank_n+1)
     return rules
 
+def prepare_corpus(filename):
+    corpus = CorpusDraft(filename)
+    corpus = corpus.apply(add_rank)  # append rank label on edges
+    corpus = corpus.apply(add_span)  # span
+    corpus = Corpus(corpus.apply(add_ancestor_relation))
+    empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
+    return corpus, empty
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
                                      description='Learn a grammar from sample files',
@@ -578,35 +587,28 @@ if __name__ == "__main__":
         "number_of_extra_leaves": 5, 
         "zipf_feature_criterion" : 0.95
     }
-    corpus_gold = CorpusDraft(args.train)
-    corpus_gold = corpus_gold.apply(add_rank)  # append rank label on edges
-    corpus_gold = corpus_gold.apply(add_span)  # span
-    corpus_gold = Corpus(corpus_gold.apply(add_ancestor_relation)) #append ancestor relation
-    corpus_empty = Corpus(CorpusDraft(corpus_gold).apply(clear_but_working))
+    corpus_gold, corpus_empty = prepare_corpus(args.train)
 
     packages = []#list the packages according to their rank 
+    draft_packages = [] #list the draft versions of the packages
 
-    R0 = adjacent_rules(corpus_gold, param)
     A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'))
     A += corpus_gold.count(Request('Y<X;e:X->Y;e.rank="_"'))
     print("---target----")
     print(f"""number of edges within corpus: {corpus_gold.count(Request('e: X -> Y;e.rank="_"'))}""")
     print(f"number of adjacent relations: {A}")
-    print(f"adjacent rules before refinement: len(R0) = {len(R0)}")
-    R0_test = GRS(R0.safe_rules().onf())
 
+    R0 = adjacent_rules(corpus_gold, param)
     R0e = refine_rules(R0, corpus_gold, param, 0)
-    print(f"after refinement: len(R0e) = {len(R0e)}")
+    print(f"adjacent rules len(R0e) = {len(R0e)}")
     R0e_test = GRS(R0e.safe_rules().onf())
     c = get_best_solution(corpus_gold, corpus_empty, R0e_test)
     print(diff_corpus_rank(c, corpus_gold))
 
     Rs0 = span_rules(corpus_gold, param)
-    print(f"span rules: len(Rs0) = {len(Rs0)}")
-
     Rs0e = refine_rules(Rs0, corpus_gold, param, 0)
     Rs0e_t = GRS(Rs0e.safe_rules().onf())
-    print(f"span rules after refinement {len(Rs0e)}")
+    print(f"span rules: len(Rs0) = {len(Rs0e)}")
     c = get_best_solution(corpus_gold, corpus_empty, Rs0e_t)
     print(diff_corpus_rank(c, corpus_gold))
 
@@ -617,10 +619,9 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, Ra0e_t)
     print(diff_corpus_rank(c, corpus_gold))
 
-    draft_packages = []
     draft_packages.append(GRSDraft(R0e | Rs0e | Rae0).safe_rules().onf())
     packages.append(GRS(draft_packages[-1]))
-    # union of adjacent rules and span rules
+
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
     print(diff_corpus_rank(currently_computed_corpus, corpus_gold))
 
@@ -635,14 +636,10 @@ if __name__ == "__main__":
         print((diff_corpus_rank(currently_computed_corpus, corpus_gold)))
 
     print("------Now testing on the evaluation corpus----------")
-    corpus_gold_eval = CorpusDraft(args.eval)
-    corpus_gold_eval = corpus_gold_eval.apply(add_rank)
-    corpus_gold_eval = corpus_gold_eval.apply(add_span)
-    corpus_gold_eval = Corpus(corpus_gold_eval.apply(add_ancestor_relation)) 
-    corpus_empty_eval = Corpus(CorpusDraft(corpus_gold_eval).apply(clear_but_working))
+    corpus_gold_eval, corpus_empty_eval = prepare_corpus(args.eval)
     computed_corpus_eval = corpus_empty_eval
 
-    for rank in range(0, 4):
+    for rank in range(4):
         print(f"--------at rank {rank} ------------")
         computed_corpus_eval = get_best_solution(corpus_gold_eval, computed_corpus_eval, packages[rank])
         print(diff_corpus_rank(computed_corpus_eval, corpus_gold_eval))
@@ -651,4 +648,3 @@ if __name__ == "__main__":
     for rank in range(4):
         print(f"--------R{rank} rules------")
         print(f"{draft_packages[rank]}")
-
