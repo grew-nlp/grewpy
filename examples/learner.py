@@ -617,7 +617,9 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, Ra0e_t)
     print(diff_corpus_rank(c, corpus_gold))
 
-    packages.append(GRS(GRSDraft(R0e | Rs0e | Rae0).safe_rules().onf()))
+    draft_packages = []
+    draft_packages.append(GRSDraft(R0e | Rs0e | Rae0).safe_rules().onf())
+    packages.append(GRS(draft_packages[-1]))
     # union of adjacent rules and span rules
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
     print(diff_corpus_rank(currently_computed_corpus, corpus_gold))
@@ -626,11 +628,11 @@ if __name__ == "__main__":
         corpus_gold_after_step = update_gold_rank(corpus_gold, currently_computed_corpus, rank)
         Rnext = rank_n_plus_one(corpus_gold_after_step, param, rank - 1)
         Rnexte = refine_rules(Rnext, corpus_gold, param, rank)
-        packages.append(GRS(Rnexte.safe_rules().onf()))
+        draft_packages.append(Rnexte.safe_rules().onf())
+        packages.append(GRS(draft_packages[-1]))
         currently_computed_corpus = get_best_solution(corpus_gold, currently_computed_corpus, packages[rank])
         print(f"-----------Rank {rank} rules : {len(Rnexte)}")
         print((diff_corpus_rank(currently_computed_corpus, corpus_gold)))
-
 
     print("------Now testing on the evaluation corpus----------")
     corpus_gold_eval = CorpusDraft(args.eval)
@@ -646,17 +648,7 @@ if __name__ == "__main__":
         print(diff_corpus_rank(computed_corpus_eval, corpus_gold_eval))
         computed_corpus_eval = remove_wrong_edges(computed_corpus_eval, corpus_gold_eval)
 
-    """
-    print("--------R0 rules------")
-    for r in R0f:
-        print(f"{r} :\n {R0f[r]}")
-    print("--------R1 rules------")
-    for r in R1e:
-        print(f"{r} :\n {R1e[r]}")
-    print("--------R2 rules------")
-    for r in R2e:
-        print(f"{r} :\n {R2e[r]}")
-    print("--------R3 rules------")
-    for r in R3e:
-        print(f"{r} :\n {R3e[r]}")
-"""
+    for rank in range(4):
+        print(f"--------R{rank} rules------")
+        print(f"{draft_packages[rank]}")
+
