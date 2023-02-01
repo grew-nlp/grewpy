@@ -42,6 +42,9 @@ class Observation:
     def __getitem__(self, k):
         return self.obs[k]
 
+    def __setitem__(self, k, v):
+        self.obs.__setitem__(k,v)
+
     def __bool__(self):
         return bool(self.obs)
 

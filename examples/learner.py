@@ -19,6 +19,66 @@ from grewpy.observation import Observation
 WORKING_SYMBOLS = ["LEFT_SPAN", "RIGHT_SPAN", "ANCESTOR"]
 IS_WORKING = re.compile("|".join(WORKING_SYMBOLS))
 
+def is_working(e):
+    """
+    return TRUE if e is a working edge
+    """
+    return IS_WORKING.search(str(e))
+        
+def feature_value_occurences(matchings, corpus):
+    """
+    given a matchings corresponding to some request on the corpus,
+    return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
+    within the corpus. n : node name, feature like 'Gender', values like 'Fem'
+    """
+    observation = Observation()
+    for m in matchings:
+        graph = corpus[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        for n in nodes:
+            N = graph[nodes[n]]  # feature structure of N
+            for k, v in N.items():
+                if (n, k) not in observation:
+                    observation[(n, k)] = dict()
+                observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
+    return observation
+
+def remove_rank(e):#remove rank within edges
+    return tuple(sorted(list((k, v) for k, v in e.items() if k != "rank")))
+
+def edge_equal_up_to_rank(e1, e2):
+    return remove_rank(e1) == remove_rank(e2)
+
+def get_edge_up_to_rank(g, n,m,e):
+    """
+    return the edge in g from n to m equal to e up to rank
+    """
+    for f in g.edges(n,m):
+        if edge_equal_up_to_rank(f,e):
+            return f
+    return None
+
+def diff(g1, g2): #diff up to rank and WORKING symbols
+    E1 = {(n, remove_rank(e), s)
+           for (n, e, s) in g1.triples() if not is_working(e["1"])}
+    E2 = {(n, remove_rank(e), s)
+           for (n, e, s) in g2.triples() if not is_working(e["1"])}
+    return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
+
+def diff_corpus_rank(c1, c2):
+    (common, left, right) = np.sum(
+        [diff(c1[sid], c2[sid]) for sid in c1], axis=0)
+    precision = common / (common + left)
+    recall = common / (common + right)
+    f_measure = 2*precision*recall / (precision+recall)
+    return {
+        "common": common,
+        "left": left,
+        "right": right,
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "f_measure": round(f_measure, 3),
+    }
 
 class WorkingGRS(GRSDraft):
     def __init__(self, *args, **kwargs):
@@ -100,50 +160,6 @@ class Sketch:
                 rules[rn] = (R, (x, p))
         return rules
 
-
-def remove_rank(e):
-    return tuple(sorted(list((k, v) for k, v in e.items() if k != "rank")))
-
-
-def edge_equal_up_to_rank(e1, e2):
-    return remove_rank(e1) == remove_rank(e2)
-
-
-def diff(g1, g2):
-    E1 = {(n, remove_rank(e), s)
-           for (n, e, s) in g1.triples() if not IS_WORKING.search(e["1"])}
-    E2 = {(n, remove_rank(e), s)
-           for (n, e, s) in g2.triples() if not IS_WORKING.search(e["1"])}
-    return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
-
-
-def diff_corpus_rank(c1, c2):
-    (common, left, right) = np.sum(
-        [diff(c1[sid], c2[sid]) for sid in c1], axis=0)
-    precision = common / (common + left)
-    recall = common / (common + right)
-    f_measure = 2*precision*recall / (precision+recall)
-    return {
-        "common": common,
-        "left": left,
-        "right": right,
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f_measure": round(f_measure, 3),
-    }
-
-
-def useful_feature(k, v, param):
-    """
-    avoid to use meaningless features/feature values
-    return True if k=feature,v=feature value can be used for classification
-    """
-    if len(v) > param["feat_value_size_limit"] or len(v) == 1:
-        return False
-    if k in param["skip_features"]:
-        return False
-    return True
-
 """
 Classifier construction: main function is refine_rules
 """
@@ -165,23 +181,31 @@ def get_tree(X, y, param):
     return clf
 
 
-def fvs(matchings, corpus, param):
+def zipf(observation, n, k, param):
     """
-    return the set of (Z,feature,values) with Z=X, Y in the matchings
-    within the corpus. param serves to filter meaningful features values
+    output the list of feature values of interest
     """
-    features = {'X': dict(), 'Y': dict()}
-    for m in matchings:
-        graph = corpus[m["sent_id"]]
-        nodes = m['matching']['nodes']
-        for n in {'X', 'Y'}:
-            N = graph[nodes[n]]  # feature structure of N
-            for k, v in N.items():
-                if k not in features[n]:
-                    features[n][k] = set()
-                features[n][k].add(v)
-    features = [(n, k, fv) for n in features for k, v in features[n].items() 
-                                if useful_feature(k, v, param) for fv in v]
+    if len(observation[(n,k)]) < 2:
+        return [] #no values or 1 is not sufficient
+    values = list(observation[(n,k)].keys())
+    values.sort(reverse=True)
+    occs = sum([observation[(n,k)][v] for v in values])
+    zoccs = sum([observation[(n,k)][v] for v in values[0:param["feat_value_size_limit"]]])
+    if zoccs/occs > param["zipf_feature_criterion"]:
+        return values[0:param["feat_value_size_limit"]]
+    return []
+
+
+def feature_values_for_decision(matchings, corpus, param, nodes):
+    """
+    restrict feature values to those useful for a decision tree
+    """
+    observation = feature_value_occurences(matchings, corpus)
+    features = dict()
+    for (n,k) in observation:
+        if n in nodes and k not in param["skip_features"]:
+            for v in zipf(observation, n, k, param):
+                features[(n,k,v)] = observation[(n,k)][v]
     return features
 
 
@@ -211,7 +235,7 @@ def create_classifier(matchings, pos, corpus, param):
                     obs[pos[(n, k, v)]] = 1
         es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
         if len(es) > 1:
-            print("mmmm")
+            print("mmmmhh that should not happen")
         elif len(es) <= 1:
             e = es.pop() if es else None
             if e not in y1:
@@ -262,7 +286,7 @@ def refine_rule(R, corpus, param, rank) -> list[Rule]:
     """
     res = []
     matchings = corpus.search(R)
-    fpat = fvs(matchings, corpus, param)  # the list of all feature values
+    fpat = list(feature_values_for_decision(matchings, corpus, param, ['X', 'Y']).keys())  # the list of all feature values
     pos = {fpat[i]: i for i in range(len(fpat))}
     clf, y1 = create_classifier(matchings, pos, corpus, param)
     if clf:
@@ -311,7 +335,9 @@ def refine_rules(Rs, corpus, param, rank, debug=False):
             Rse[rule_name] = R
     return Rse
 
-
+"""
+Operations on the corpus, compute SPAN, ANCESTOR, remove working edges, label edges with default rank
+"""
 def add_span(g):
     N = len(g)
     left, right = {i: i for i in g}, {i: i for i in g}
@@ -342,7 +368,7 @@ def add_ancestor_relation(g):
     while todo:
         n, m = todo.pop()
         for s, e in g.sucs[m]:
-            if not IS_WORKING.search(str(e)):
+            if not is_working(e):
                 g.sucs[n].append((s, {"1": "ANCESTOR"}))
                 todo.append((n, s))
     return g
@@ -353,9 +379,27 @@ def clear_but_working(g):
     delete non working edges within g
     """
     for n in g.sucs:
-        g.sucs[n] = [(s, e) for (s, e) in g.sucs[n] if IS_WORKING.search(e.get("1", ""))]
+        g.sucs[n] = [(s, e) for (s, e) in g.sucs[n] if is_working(e.get("1", ""))]
     return (g)
 
+def add_rank(g):
+    """
+    add rank=_ to any edge which is not a working edge
+    """
+    def add_null_rank(e):
+        if isinstance(e, str):
+            return {"1": e, "rank": "_"}
+        e["rank"] = "_"
+        return e
+    for n in g:
+        if n in g.sucs:
+            g.sucs[n] = [(m, add_null_rank(e)) for (m, e) in g.sucs[n]]
+    return g
+
+
+"""
+Operations on computations
+"""
 
 def get_best_solution(corpus_gold, corpus_start, grs):
     """
@@ -378,42 +422,27 @@ def get_best_solution(corpus_gold, corpus_start, grs):
                 corpus_draft[sid] = g
     return corpus_draft
 
-def add_rank(g):
-    """
-    add rank=_ to any edge which is not a working edge
-    """
-    def add_null_rank(e):
-        if isinstance(e, str):
-            return {"1": e, "rank": "_"}
-        e["rank"] = "_"
-        return e
-    for n in g:
-        if n in g.sucs:
-            g.sucs[n] = [(m, add_null_rank(e)) for (m, e) in g.sucs[n]]
-    return g
-
-def update_gold_rank(corpus_gold, computed_corpus):
+def update_gold_rank(corpus_gold, computed_corpus, rank):
     """
     build a copy of corpus_gold but with a rank update
+    remove edges in computed corpus not in corpus_gold
     """
     new_gold = CorpusDraft(corpus_gold)
     for sid in new_gold:
         g_gold = new_gold[sid]
         g_new = computed_corpus[sid]
         for n in g_gold.sucs:
-            if n in g_new:
-                new_sucs = []
-                for (m, e) in g_gold.sucs[n]:
-                    e_new = g_new.edge(n, m)
-                    if isinstance(e_new, str):
-                        st = [a.split("=") for a in e_new.split(",")]
-                        e_new = {x[0].strip(): x[1].strip() for x in st}
-
-                    if e_new and edge_equal_up_to_rank(e, e_new):
-                        new_sucs.append((m, e_new))
+            new_sucs = []
+            for m,e in g_gold.sucs[n]:
+                if is_working(e):
+                    new_sucs.append((m,e))
+                else:
+                    eprime = get_edge_up_to_rank(g_new, n, m, e)
+                    if eprime:
+                        new_sucs.append((m, eprime))
                     else:
-                        new_sucs.append((m, e))
-                g_gold.sucs[n] = new_sucs
+                        new_sucs.append((m,e))
+            g_gold.sucs[n] = new_sucs
     return new_gold
 
 
@@ -443,15 +472,16 @@ def remove_wrong_edges(corpus, corpus_gold):
                     g_corp.sucs[n].append((m, e))
     return new_corpus
 
+"""
+Learning sketches
+"""
 
 def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     """
     build all adjacent rules. They are supposed to connect words at distance 1
     """
     rules = WorkingGRS()
-    sadj =[]
-    #sadj.append( Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr8") )
-     
+    sadj =[]     
     sadj.append( Sketch(Request("X[];Y[];X<Y"), ["X.upos", "Y.upos"], "adjacent_lr") )
     sadj.append( Sketch(Request("X[];Y[];Y<X"), ["X.upos", "Y.upos"], 'adjacent_rl') )
     sadj.append( Sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;X.upos=Z.upos"),["X.upos", "Y.upos"], "no_intermediate_lr3") )
@@ -464,13 +494,8 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     sadj.append( Sketch(Request("X[];Y[];Z[];X<Y;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "adjacent3_lr") )
     sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent4_rl') )
     sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;X<Z"), ["X.upos", "Y.upos", "Z.upos"], "adjacent5_lr") )
-    sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent6_rl') )
-    
-    
-    sadj.append( Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;X.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr7") )
-    sadj.append(Sketch(Request("X[];Y[];Z[];Y<<X").without("Y<<Z;Z<<X;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr9"))
-    sadj.append(Sketch(Request("X[];Y[];Z[];X<<Y").without("X<<Z;Z<<Y;Y.upos=Z.upos"), ["X.upos", "Y.upos"], "no_intermediate_lr6"))
-"""
+    sadj.append( Sketch(Request("X[];Y[];Z[];Y<X;Z<Y"), ["X.upos", "Y.upos", "Z.upos"], 'adjacent6_rl') )    
+    """
     for s in sadj:
         rules |= s.build_rules(s.cluster(corpus), param)
     return rules
@@ -500,8 +525,8 @@ def ancestor_rules(corpus, param):
     sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Y<Z"), ["X.upos", "Y.upos", "Z.upos"], "yz_ancestor"))
     sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;Z<X"), ["X.upos", "Y.upos", "Z.upos"], "zx_ancestor"))
     sketches.append(Sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;X<Z"), ["X.upos", "Y.upos", "Z.upos"], "xz_ancestor"))
-    sketches.append(Sketch(Request("X[];Y[];X<T;Y-[LEFT_SPAN]->T"), ["X.upos", "Y.upos"], "span_ancestor_zy"))
-    sketches.append(Sketch(Request("X[];Y[];T<X;Y-[RIGHT_SPAN]->T"), ["X.upos", "Y.upos"], "span_ancestor_yz"))
+    sketches.append(Sketch(Request("X[];Y[];Y-[LEFT_SPAN]->T;X-[ANCESTOR]->Z;Z<T"), ["X.upos", "Y.upos"], "span_ancestor_zy"))
+    sketches.append(Sketch(Request("X[];Y[];Y-[RIGHT_SPAN]->T;X-[ANCESTOR]->Z;T<Z"), ["X.upos", "Y.upos"], "span_ancestor_yz"))
     rules = WorkingGRS()
     for sketch in sketches:
         rules |= sketch.build_rules(sketch.cluster(corpus), param)
@@ -530,7 +555,6 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
             rules |= sketch.build_rules(observations, param, rank_n+1)
     return rules
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
                                      description='Learn a grammar from sample files',
@@ -548,17 +572,19 @@ if __name__ == "__main__":
         "valid_threshold": 0.90,
         "max_depth": 4,
         "min_samples_leaf": 5,
-        "max_leaf_node": 5,  # unused see DecisionTreeClassifier.max_leaf_node
         "feat_value_size_limit": 10,
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
         "node_impurity": 0.2,
-        "number_of_extra_leaves": 5
+        "number_of_extra_leaves": 5, 
+        "zipf_feature_criterion" : 0.95
     }
     corpus_gold = CorpusDraft(args.train)
     corpus_gold = corpus_gold.apply(add_rank)  # append rank label on edges
     corpus_gold = corpus_gold.apply(add_span)  # span
     corpus_gold = Corpus(corpus_gold.apply(add_ancestor_relation)) #append ancestor relation
     corpus_empty = Corpus(CorpusDraft(corpus_gold).apply(clear_but_working))
+
+    packages = []#list the packages according to their rank 
 
     R0 = adjacent_rules(corpus_gold, param)
     A = corpus_gold.count(Request('X<Y;e:X->Y;e.rank="_"'))
@@ -568,8 +594,6 @@ if __name__ == "__main__":
     print(f"number of adjacent relations: {A}")
     print(f"adjacent rules before refinement: len(R0) = {len(R0)}")
     R0_test = GRS(R0.safe_rules().onf())
-    c = get_best_solution(corpus_gold, corpus_empty, R0_test)
-    print(diff_corpus_rank(c, corpus_gold))
 
     R0e = refine_rules(R0, corpus_gold, param, 0)
     print(f"after refinement: len(R0e) = {len(R0e)}")
@@ -593,41 +617,20 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, Ra0e_t)
     print(diff_corpus_rank(c, corpus_gold))
 
+    packages.append(GRS(GRSDraft(R0e | Rs0e | Rae0).safe_rules().onf()))
     # union of adjacent rules and span rules
-    R0f = GRSDraft(R0e | Rs0e | Rae0)
-    R0f_t = GRS(R0f.safe_rules().onf())
-    computed_corpus_after_rank0 = get_best_solution(
-        corpus_gold, corpus_empty, R0f_t)
-    print(diff_corpus_rank(computed_corpus_after_rank0, corpus_gold))
+    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
+    print(diff_corpus_rank(currently_computed_corpus, corpus_gold))
 
-    corpus_gold_after_rank0 = update_gold_rank(
-        corpus_gold, computed_corpus_after_rank0)
-    R1 = rank_n_plus_one(corpus_gold_after_rank0, param, 0)
-    R1e = refine_rules(R1, corpus_gold, param, 1)
-    R1e_t = GRS(R1e.safe_rules().onf())
-    computed_corpus_after_rank1 = get_best_solution(
-        corpus_gold, computed_corpus_after_rank0, R1e_t)
-    print(f"-----------Rank 1 rules : {len(R1e)}")
-    print((diff_corpus_rank(computed_corpus_after_rank1, corpus_gold)))
+    for rank in range(1, 4):
+        corpus_gold_after_step = update_gold_rank(corpus_gold, currently_computed_corpus, rank)
+        Rnext = rank_n_plus_one(corpus_gold_after_step, param, rank - 1)
+        Rnexte = refine_rules(Rnext, corpus_gold, param, rank)
+        packages.append(GRS(Rnexte.safe_rules().onf()))
+        currently_computed_corpus = get_best_solution(corpus_gold, currently_computed_corpus, packages[rank])
+        print(f"-----------Rank {rank} rules : {len(Rnexte)}")
+        print((diff_corpus_rank(currently_computed_corpus, corpus_gold)))
 
-    corpus_gold_after_rank1 = update_gold_rank(corpus_gold, computed_corpus_after_rank1)
-    R2 = rank_n_plus_one(corpus_gold_after_rank1, param, 1)
-    R2e = refine_rules(R2, corpus_gold, param, 2)
-    R2e_t = GRS(R2e.safe_rules().onf())
-    computed_corpus_after_rank2 = get_best_solution(
-        corpus_gold, computed_corpus_after_rank1, R2e_t)
-    print(f"----------Rank 2 rules {len(R2e)}")
-    print((diff_corpus_rank(computed_corpus_after_rank2, corpus_gold)))
-
-    corpus_gold_after_rank2 = update_gold_rank(
-        corpus_gold, computed_corpus_after_rank2)
-    R3 = rank_n_plus_one(corpus_gold_after_rank2, param, 2)
-    R3e = refine_rules(R3, corpus_gold, param, 3)
-    R3e_t = GRS(R3e.safe_rules().onf())
-    computed_corpus_after_rank3 = get_best_solution(
-        corpus_gold, computed_corpus_after_rank2, R3e_t)
-    print(f"---------Rank 3 rules {len(R3e)}")
-    print((diff_corpus_rank(computed_corpus_after_rank3, corpus_gold)))
 
     print("------Now testing on the evaluation corpus----------")
     corpus_gold_eval = CorpusDraft(args.eval)
@@ -635,33 +638,13 @@ if __name__ == "__main__":
     corpus_gold_eval = corpus_gold_eval.apply(add_span)
     corpus_gold_eval = Corpus(corpus_gold_eval.apply(add_ancestor_relation)) 
     corpus_empty_eval = Corpus(CorpusDraft(corpus_gold_eval).apply(clear_but_working))
-    corpus_eval_after_r0 = get_best_solution(corpus_gold_eval, corpus_empty_eval, R0f_t)
+    computed_corpus_eval = corpus_empty_eval
 
-    print("--------at rank 0-------------")
-    print(diff_corpus_rank(corpus_eval_after_r0, corpus_gold_eval))
-    corpus_filtered_after_r0 = remove_wrong_edges(
-        corpus_eval_after_r0, corpus_gold_eval)
-
-    corpus_eval_after_r1 = get_best_solution(
-        corpus_gold_eval, corpus_filtered_after_r0, R1e_t)
-    print("--------at rank 1-------------")
-    print(diff_corpus_rank(corpus_eval_after_r1, corpus_gold_eval))
-    corpus_filtered_after_r1 = remove_wrong_edges(
-        corpus_eval_after_r1, corpus_gold_eval)
-
-    corpus_eval_after_r2 = get_best_solution(
-        corpus_gold_eval, corpus_filtered_after_r1, R2e_t)
-    print("--------at rank 2-------------")
-    print(diff_corpus_rank(corpus_eval_after_r2, corpus_gold_eval))
-    corpus_filtered_after_r2 = remove_wrong_edges(
-        corpus_eval_after_r2, corpus_gold_eval)
-
-    corpus_eval_after_r3 = get_best_solution(
-        corpus_gold_eval, corpus_filtered_after_r2, R3e_t)
-    print("--------at rank 3-------------")
-    print(diff_corpus_rank(corpus_eval_after_r3, corpus_gold_eval))
-    corpus_filtered_after_r3 = remove_wrong_edges(
-        corpus_eval_after_r3, corpus_gold_eval)
+    for rank in range(0, 4):
+        print(f"--------at rank {rank} ------------")
+        computed_corpus_eval = get_best_solution(corpus_gold_eval, computed_corpus_eval, packages[rank])
+        print(diff_corpus_rank(computed_corpus_eval, corpus_gold_eval))
+        computed_corpus_eval = remove_wrong_edges(computed_corpus_eval, corpus_gold_eval)
 
     """
     print("--------R0 rules------")
