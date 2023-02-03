@@ -224,3 +224,17 @@ class Corpus:
     def __iter__(self):
         return iter(self.get_sent_ids())
 
+    def to_conll(self):
+        """
+        return a CoNLL string for the current corpus
+        """
+        reply = network.send_and_receive({
+            "command": "corpus_to_conll",
+            "corpus_index": self._id
+        })
+        return reply
+
+    def grew_web(self):
+        network.grew_web_connect()
+        network.grew_web_upload_corpus(self.to_conll())
+        network.grew_web_open()

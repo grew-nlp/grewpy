@@ -99,3 +99,71 @@ def send_and_receive(msg):
     except AttributeError as e: # connect issue
         raise GrewError({"function": msg["command"], "message" : e.value})
 
+#===========================================================================
+# used for launching grew web on a given corpus
+import tempfile
+import requests
+import webbrowser
+import http
+
+local = False
+if local:
+    grew_web_back = "http://localhost:8080"
+    grew_web_front = "http://localhost:8888/grew_web"
+else:
+    grew_web_back = "http://back.grew.fr"
+    grew_web_front = "http://transform.grew.fr"
+
+def _post_request (service, resp):
+    if resp.status_code >= 300:
+        raise GrewError({
+            "Error": "HTTP", 
+            "service": service, 
+            "status_code": resp.status_code,
+            "message" : http.client.responses[resp.status_code]
+        })
+    data = json.loads (resp.text)
+    if data["status"] == "OK":
+        return data["data"]
+    if data["status"] == "ERROR":
+        raise GrewError({"grew_web": service, "message" : data["message"]})
+    raise GrewError({"UNEXPECTED": service, "message" : data})
+
+# Global variable to keep track of session_id obtained with the call to grew_web_connect 
+session_id = ""
+
+def grew_web_connect ():
+    global session_id
+    session_id = _post_request ("connect", requests.post(f"{grew_web_back}/connect"))
+
+def grew_web_upload_grs (json_grs):
+    if session_id == "":
+        raise GrewError({"grew_web": "not connected"})
+    with tempfile.NamedTemporaryFile(mode="a+", delete=True, suffix=".grs") as f:
+        f.write(json.dumps(json_grs))
+        f.seek(0) # ready to be read 
+        r = requests.post(f"{grew_web_back}/upload_grs",
+            data = { "session_id": session_id},
+            files = { "json_file": f }
+        )
+        _post_request ("upload_grs", r)
+
+def grew_web_upload_corpus (conll):
+    if session_id == "":
+        raise GrewError({"grew_web": "not connected"})
+    with tempfile.NamedTemporaryFile(mode="a+", delete=True, suffix=".conllu") as f:
+        f.write(conll)
+        f.seek(0) # ready to be read 
+        r = requests.post(f"{grew_web_back}/upload_corpus",
+            data = { "session_id": session_id},
+            files = { "file": f }
+        )
+        _post_request ("upload_corpus", r)
+
+def grew_web_url():
+    if session_id == "":
+        raise GrewError({"grew_web": "not connected"})
+    return f"{grew_web_front}?session_id={session_id}"
+
+def grew_web_open():
+    webbrowser.open (grew_web_url())
