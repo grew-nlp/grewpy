@@ -81,8 +81,6 @@ class CorpusDraft(dict):
         }
 
 
-
-
 class Corpus:
     def __init__(self, data):
         """An abstract corpus
@@ -223,4 +221,6 @@ class Corpus:
 
     def __iter__(self):
         return iter(self.get_sent_ids())
+
+    
 

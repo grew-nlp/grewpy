@@ -51,10 +51,11 @@ class Observation:
     def anomaly(self, L,  threshold):
         """
         L is a key within self
-        return for L an edge and its associated probability if beyond base_threshold
+        return for L an edge and its occurrence evaluation 
+        and number of total occurrences if beyond base_threshold
         """
         s = sum(self.obs[L].values())
         for x, v in self.obs[L].items():
             if v > threshold * s and x:
-                return x, v/s
-        return None, None
+                return (x,v,s)
+        return None, None, None

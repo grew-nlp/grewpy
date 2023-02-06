@@ -15,7 +15,6 @@ from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Gra
 from grewpy import Corpus, GRS, set_config
 from grewpy.observation import Observation
 
-
 WORKING_SYMBOLS = ["LEFT_SPAN", "RIGHT_SPAN", "ANCESTOR"]
 IS_WORKING = re.compile("|".join(WORKING_SYMBOLS))
 
@@ -84,10 +83,11 @@ class WorkingGRS(GRSDraft):
     def __init__(self, *args, **kwargs):
         """
         like a GRSDraft with an additional evaluation of the rules
-        each rule is evaluated from 0.0 (not seen) to (1.0, always)
+        each rule is evaluated by two numbers: number of good application, 
+        total number of application
         """
         super().__init__(*args, **kwargs)
-        self.eval = {x: 0 for x in self}
+        self.eval = {x: (0,0) for x in self}
 
     def __setitem__(self, __key, __value):
         self.eval[__key] = __value[1]
@@ -149,7 +149,7 @@ class Sketch:
             return f"{crit}={val}"
         rules = WorkingGRS()
         for parameter in observation:
-            x, p = observation.anomaly(parameter, param["base_threshold"])
+            x, v,s = observation.anomaly(parameter, param["base_threshold"])
             if x:
                 extra_pattern = [crit_to_request(crit, val) for (crit, val) in zip(self.cluster_criterion, parameter)]
                 P = Request(self.P, *extra_pattern)
@@ -157,7 +157,7 @@ class Sketch:
                 c = Add_edge("X", x, "Y")
                 R = Rule(P, Commands(c))
                 rn = re.sub("[.,=\"]", "",f"_{'_'.join(parameter)}_{self.sketch_name}")
-                rules[rn] = (R, (x, p))
+                rules[rn] = (R, (x, (v,s)))
         return rules
 
 """
@@ -242,8 +242,6 @@ def create_classifier(matchings, pos, corpus, param):
                 y1[e] = len(y1)
             y.append(y1[e])
             X.append(obs)
-
-
     return get_tree(X, y, param), {y1[i]: i for i in y1}
 
 
@@ -318,7 +316,8 @@ def refine_rules(Rs, corpus, param, rank, debug=False):
     Rse = GRSDraft()
     for rule_name in Rs.rules():
         R = Rs[rule_name]
-        if Rs.eval[rule_name][1] < param["valid_threshold"]:
+        v, s = Rs.eval[rule_name][1]
+        if v/s < param["valid_threshold"] or v < param["min_occurrence_nb"]:
             new_r, clf = refine_rule(R.request, corpus, param, rank)
             if len(new_r) >= 1:
                 cpt = 1
@@ -425,7 +424,6 @@ def get_best_solution(corpus_gold, corpus_start, grs):
 def update_gold_rank(corpus_gold, computed_corpus, rank):
     """
     build a copy of corpus_gold but with a rank update
-    remove edges in computed corpus not in corpus_gold
     """
     new_gold = CorpusDraft(corpus_gold)
     for sid in new_gold:
@@ -444,7 +442,6 @@ def update_gold_rank(corpus_gold, computed_corpus, rank):
                         new_sucs.append((m,e))
             g_gold.sucs[n] = new_sucs
     return new_gold
-
 
 def remove_wrong_edges(corpus, corpus_gold):
     """
@@ -585,7 +582,8 @@ if __name__ == "__main__":
         "skip_features": ['xpos', 'upos', 'SpaceAfter'],
         "node_impurity": 0.2,
         "number_of_extra_leaves": 5, 
-        "zipf_feature_criterion" : 0.95
+        "zipf_feature_criterion" : 0.95, 
+        "min_occurrence_nb" : 10
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
 
@@ -636,9 +634,7 @@ if __name__ == "__main__":
         print((diff_corpus_rank(currently_computed_corpus, corpus_gold)))
 
     print("------Now testing on the evaluation corpus----------")
-    corpus_gold_eval, corpus_empty_eval = prepare_corpus(args.eval)
-    computed_corpus_eval = corpus_empty_eval
-
+    corpus_gold_eval, computed_corpus_eval = prepare_corpus(args.eval)
     for rank in range(4):
         print(f"--------at rank {rank} ------------")
         computed_corpus_eval = get_best_solution(corpus_gold_eval, computed_corpus_eval, packages[rank])
