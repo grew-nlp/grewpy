@@ -81,8 +81,6 @@ class CorpusDraft(dict):
         }
 
 
-
-
 class Corpus:
     def __init__(self, data):
         """An abstract corpus
