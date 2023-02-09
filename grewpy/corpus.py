@@ -90,7 +90,12 @@ class Corpus:
         :raise an error if the files was not correctly loaded
         """
         if isinstance(data, list):
-            req = {"command": "corpus_load", "files": data}
+            if data and isinstance(data[0], Graph):
+                graphs = {f'{i}' : data[i].json_data() for i in range(len(data))}
+                req = {"command": "corpus_from_dict", "graphs": graphs}
+            else:
+                #supposed to be a list of files
+                req = {"command": "corpus_load", "files": data}
             reply = network.send_and_receive(req)
         elif isinstance(data, dict):
             req = {"command": "corpus_from_dict", "graphs": {
@@ -146,7 +151,7 @@ class Corpus:
             return self.get(sids[data])
         if isinstance(data, slice):
             sids = self.get_sent_ids()
-            return [self[sid] for sid in sids]
+            return [self[sid] for sid in sids[data]]
 
 
     def get_all(self):
@@ -231,8 +236,3 @@ class Corpus:
             "corpus_index": self._id
         })
         return reply
-
-    def grew_web(self):
-        network.grew_web_connect()
-        network.grew_web_upload_corpus(self.to_conll())
-        network.grew_web_open()

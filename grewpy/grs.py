@@ -385,10 +385,3 @@ class GRS:
         elif isinstance(data, CorpusDraft):
             acorpus = Corpus(data)
             self.apply(acorpus, strat, abstract)
-
-    def grew_web(self, corpus=None):
-        network.grew_web_connect()
-        network.grew_web_upload_grs(self.json())
-        if corpus:
-            network.grew_web_upload_corpus(corpus.to_conll())
-        network.grew_web_open()

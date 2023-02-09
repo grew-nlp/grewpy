@@ -10,4 +10,6 @@ from .network import init
 
 from .grew import set_config, request_counter
 
+from .grew_web import Grew_web
+
 init()

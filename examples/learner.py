@@ -208,6 +208,7 @@ def feature_values_for_decision(matchings, corpus, param, nodes):
                 features[(n,k,v)] = observation[(n,k)][v]
     return features
 
+feature_factor = {"lemma" : 0.25, 'wordform':0.25}
 
 def create_classifier(matchings, pos, corpus, param):
     """
@@ -232,7 +233,7 @@ def create_classifier(matchings, pos, corpus, param):
             feat = graph[nodes[n]]
             for k, v in feat.items():
                 if (n, k, v) in pos:
-                    obs[pos[(n, k, v)]] = 1
+                    obs[pos[(n, k, v)]] = feature_factor.get(k,"1")
         es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
         if len(es) > 1:
             print("mmmmhh that should not happen")
@@ -602,6 +603,7 @@ if __name__ == "__main__":
     R0e_test = GRS(R0e.safe_rules().onf())
     c = get_best_solution(corpus_gold, corpus_empty, R0e_test)
     print(diff_corpus_rank(c, corpus_gold))
+    print(R0e)
 
     Rs0 = span_rules(corpus_gold, param)
     Rs0e = refine_rules(Rs0, corpus_gold, param, 0)
