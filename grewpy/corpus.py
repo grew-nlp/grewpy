@@ -16,8 +16,43 @@ from .grew import GrewError
 from .observation import Observation
 from . import network
 
+from .matchings import Matchings
 
-class CorpusDraft(dict):
+class AbstractCorpus():
+    def diff(self, other, edge_criterion=lambda e: True):
+        """
+        given two corpora, outputs the number of common edges, only left ones and only right ones
+        """
+        (common, left, right) = np.sum(
+            [self[sid].diff(other[sid],edge_criterion) for sid in self], axis=0)
+        precision = common / (common + left+1e-10)
+        recall = common / (common + right+1e-10)
+        f_measure = 2*precision*recall / (precision+recall+1e-10)
+        return {
+            "common": common,
+            "left": left,
+            "right": right,
+            "precision": round(precision, 3),
+            "recall": round(recall, 3),
+            "f_measure": round(f_measure, 3),
+        }
+
+    def edge_diff_up_to(self, other, edge_transform=lambda e: e):
+        (common, left, right) = np.sum(
+            [self[sid].edge_diff_up_to(other[sid], edge_transform) for sid in self], axis=0)
+        precision = common / (common + left)
+        recall = common / (common + right)
+        f_measure = 2*precision*recall / (precision+recall)
+        return {
+            "common": common,
+            "left": left,
+            "right": right,
+            "precision": round(precision, 3),
+            "recall": round(recall, 3),
+            "f_measure": round(f_measure, 3),
+        }
+
+class CorpusDraft(AbstractCorpus,dict):
     """
     the draft is composed of 
       - self, a dict mapping sentence_id to graphs
@@ -62,26 +97,8 @@ class CorpusDraft(dict):
         """
         return CorpusDraft({sid : fun(self[sid]) for sid in self})
 
-    def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):
-        """
-        given two corpora, outputs the number of common edges, only left ones and only right ones
-        """
-        (common, left, right) = np.sum(
-            [self[sid].diff(corpus_gold[sid],skip_edge_criterion) for sid in self], axis=0)
-        precision = common / (common + left+1e-10)
-        recall = common / (common + right+1e-10)
-        f_measure = 2*precision*recall / (precision+recall+1e-10)
-        return {
-            "common": common,
-            "left": left,
-            "right": right,
-            "precision": round(precision, 3),
-            "recall": round(recall, 3),
-            "f_measure": round(f_measure, 3),
-        }
 
-
-class Corpus:
+class Corpus(AbstractCorpus):
     def __init__(self, data):
         """An abstract corpus
         :param data: a file, a list of files or a CoNLL string representation of a corpus
@@ -162,7 +179,7 @@ class Corpus:
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=False):
+    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=None):
         """
         Search for [request] into [corpus_index]
 
@@ -179,9 +196,9 @@ class Corpus:
             "request": request.json_data(),
             "clustering_keys": clustering_parameter + clustering_keys
         })
-        if not flat:
-            return res
-        if clustering_parameter or clustering_keys:
+        if flat == "matchings":
+            return Matchings(res, self)
+        elif flat == "observations" and clustering_parameter or clustering_keys:
             return Observation(res, clustering_parameter, clustering_keys)
         return res
 
@@ -203,23 +220,6 @@ class Corpus:
         if clustering_parameter or clustering_keys:
             return Observation(obs=res,parameter=clustering_parameter, keys=clustering_keys)
         return res
-
-    def diff(self, corpus_gold, skip_edge_criterion=lambda e: False):
-        """
-        given two corpora, outputs the number of common edges, only left ones and only right ones
-        """
-        (common, left, right) = np.sum([self[sid].diff(corpus_gold[sid], skip_edge_criterion) for sid in self], axis=0)
-        precision = common / (common + left)
-        recall = common / (common + right)
-        f_measure = 2*precision*recall / (precision+recall)
-        return {
-        "common": common,
-        "left": left,
-        "right": right,
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f_measure": round(f_measure, 3),
-    }
 
     def __len__(self):
         return self._length

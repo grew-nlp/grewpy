@@ -1,3 +1,4 @@
+
 class Observation:
     """
     maps a tuple of criteria to a dict mapping edge -> nb of observation
@@ -59,3 +60,29 @@ class Observation:
             if v > threshold * s and x:
                 return (x,v,s)
         return None, None, None
+
+    @staticmethod
+    def feature_value_occurences(matchings, corpus):
+        """
+        given a matchings corresponding to some request on the corpus,
+        return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
+        within the corpus. n : node name, feature like 'Gender', values like 'Fem'
+        TO BE REMOVED
+        """
+        ...
+   
+
+    def zipf(observation, n, k, param):
+        """
+        output the list of feature values of interest
+        """
+        if len(observation[(n, k)]) < 1:
+            return []  # no values or 1 is not sufficient
+        values = list(observation[(n, k)].keys())
+        values.sort(reverse=True)
+        occs = sum([observation[(n, k)][v] for v in values])
+        zoccs = sum([observation[(n, k)][v]
+                     for v in values[0:param["feat_value_size_limit"]]])
+        if zoccs/occs > param["zipf_feature_criterion"]:
+            return values[:param["feat_value_size_limit"]]
+        return []

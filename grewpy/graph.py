@@ -179,6 +179,12 @@ class Graph():
                     return v
         return None
 
+    def edge_up_to(self, n, m, criterion):
+        if n in self._sucs:
+            for k,v in self._sucs[n]:
+                if k == m and criterion(v):
+                    return v
+
     def edges(self, n, m):
         """
         given node n and m, 
@@ -186,7 +192,12 @@ class Graph():
         """
         return [v for (k,v) in self._sucs[n] if k == m]
 
-    
+    def edges_up_to(self, n, m, criterion):
+        """
+        search for edges between n and m verifying some criterion
+        """
+        return [v for (k, v) in self._sucs[n] if k == m and criterion(v)]
+
 
     def run(self, Grs, strat="main"):
         return Grs.run(self, strat)
@@ -194,10 +205,12 @@ class Graph():
     def apply(self, Grs, strat="main"):
         return Grs.apply(self, strat)
 
-    def diff(self, other, skip_edge_criterion=lambda e: False) -> np.array:
-        E1 = {(m,repr(e),n) for (m,e,n) in self.triples() if not skip_edge_criterion(e)}  # set of edges as triples
-        E2 = {(m, repr(e), n) for (m, e, n) in other.triples()
-              if not skip_edge_criterion(e)}  # set of edges as triples
+    def edge_diff(self, other, edge_criterion=lambda e: True) -> np.array:
+        """
+        edge difference between two graphs
+        """
+        E1 = {(m,repr(e),n) for (m,e,n) in self.triples() if edge_criterion(e)}  # set of edges as triples
+        E2 = {(m, repr(e), n) for (m, e, n) in other.triples() if edge_criterion(e)}  # set of edges as triples
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
     def lower(self, n, m):
@@ -216,3 +229,17 @@ class Graph():
         if n in self.order and s in self.order:
             return self.order.index(n) > self.order.index(s)
         return False
+
+    def edge_diff_up_to(self, other, edge_transform=lambda e:e):
+        E1 = set()
+        for m, e, n in self.triples():
+            et = edge_transform(e)
+            if et:
+                E1.add((m,et,n))
+        E2 = set()
+        for m, e, n in other.triples():
+            et = edge_transform(e)
+            if et:
+                E2.add((m, et, n))
+        return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
+        

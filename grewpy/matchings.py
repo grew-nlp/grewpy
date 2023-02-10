@@ -24,7 +24,8 @@ class Matching():
         else:
             observation = Observation()
             for n in nl:
-                for k,v in self.graph.features.items():
+                n_in_g = self.nodes[n]
+                for k,v in self.graph[n_in_g].items():
                     if (n, k) not in observation:
                         observation[(n, k)] = dict()
                     observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
@@ -41,7 +42,8 @@ class Matchings(dict):
             sid = line["sent_id"]
             if sid not in self:
                 self[sid] = []
-            self[sid].append(Matching( line["matching"], corpus[sid]))
+            self[sid].append(Matching( line["matching"], 
+            corpus[sid]))
 
     def feature_values(self, arg=None, flat=False):
         observation = Observation()
