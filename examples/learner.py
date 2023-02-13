@@ -42,90 +42,6 @@ class WorkingGRS(GRSDraft):
         self.eval |= other.eval
         return self
 
-def get_tree(X, y, param):
-    """
-    build a decision tree based on observation X,y
-    given hyperparameter within param
-    """
-    if not X or not len(X[0]):
-        return None
-    if max(y) == 0:
-        return None
-    clf = DecisionTreeClassifier(max_depth=param["max_depth"],
-                                 max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
-                                 min_samples_leaf=param["min_samples_leaf"],
-                                 criterion="gini")
-    clf.fit(X, y)
-    return clf
-
-class Classifier():
-    def __init__(self, R, corpus, param):
-        """
-        build a tree classifier with
-        extra mapping from y => int
-        and fpat : (node, feature, feature_value) => occurrences
-        """
-        matchings = corpus.search(R, flat="matchings")
-        fpat = matchings.feature_values(['X', 'Y'])  # the list of all feature values
-        fpat = {(n,k,v): fpat[(n,k)][v] for (n,k) in fpat.obs for v in fpat.obs[(n,k)] if k not in param["skip_features"]}
-        pos = dict()
-        for key in fpat: #map a number to each feature value
-            pos[key] = len(pos)
-        X, y1, y = list(), dict(), list()
-        # X: set of input values, as a list of (0,1)
-        # y: set of output values, an index associated to the edge e
-        # the absence of an edge has its own index
-        # y1: the mapping between an edge e to some index
-        for _, ms in matchings.items():
-            for m in ms:
-                # each matching will lead to an obs which is a list of 0/1 values    
-                obs = [0]*len(pos)
-                for n in m.nodes:
-                    feat = m.graph[m.nodes[n]]
-                    for k, v in feat.items():
-                        if (n, k, v) in pos:
-                            obs[pos[(n, k, v)]] = feature_factor.get(k, 1)
-                es = {e for e in m.graph.edges(m.nodes['X'], m.nodes['Y']) if "rank" in e}
-                if len(es) > 1:
-                    print("mmmmhh that should not happen")
-                elif len(es) <= 1:
-                    e = es.pop() if es else None
-                    if e not in y1:
-                        y1[e] = len(y1)
-                    y.append(y1[e])
-                    X.append(obs)
-        self.clf = get_tree(X,y,param)
-        self.mapping = {y1[i]: i for i in y1}
-        self.fpat = fpat
-
-    def find_classes(clf, param):
-        """
-    given a decision tree, extract "interesting" branches
-    the output is a dict mapping the node_index to its branch
-    a branch is the list of intermediate constraints = (7,1,8,0,...)
-    that is feature value 7 has without clause whereas feature 8 is positive 
-    """
-        def branches(pos, tree, current, acc, threshold):
-            if tree.feature[pos] >= 0:
-                if tree.impurity[pos] < threshold:
-                    acc[pos] = current
-                    return
-                # there is a feature
-                if tree.children_left[pos] >= 0:
-                    # there is a child
-                    left = current + ((tree.feature[pos], 1),)
-                    branches(tree.children_left[pos], tree, left, acc, threshold)
-                if tree.children_right[pos] >= 0:
-                    right = current + ((tree.feature[pos], 0),)
-                    branches(tree.children_right[pos], tree, right, acc, threshold)
-                return
-            else:
-                if tree.impurity[pos] < threshold:
-                    acc[pos] = current
-        tree = clf.clf.tree_
-        acc = dict()
-        branches(0, tree, tuple(), acc, param["node_impurity"])
-        return acc
 
 
 def build_rules(sketch, observation, param, rule_name, rank_level=0):
@@ -164,32 +80,165 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
 feature_factor = {"lemma" : 100, 'wordform':20}
 
 
+def get_tree(X, y, param):
+    """
+    build a decision tree based on observation X,y
+    given hyperparameter within param
+    """
+    if not X or not len(X[0]):
+        return None
+    if max(y) == 0:
+        return None
+    clf = DecisionTreeClassifier(max_depth=param["max_depth"],
+                                 max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
+                                 min_samples_leaf=param["min_samples_leaf"],
+                                 criterion="gini")
+    clf.fit(X, y)
+    return clf
+
+
+def zipf(observation, n, k, param):
+    """
+    output the list of feature values of interest
+    """
+    if len(observation[(n,k)]) < 1:
+        return [] #no values or 1 is not sufficient
+    values = list(observation[(n,k)].keys())
+    values.sort(reverse=True)
+    occs = sum([observation[(n,k)][v] for v in values])
+    zoccs = sum([observation[(n,k)][v] for v in values[0:param["feat_value_size_limit"]]])
+    if zoccs/occs > param["zipf_feature_criterion"]:
+        return values[0:param["feat_value_size_limit"]]
+    return []
+
+def feature_value_occurences(matchings, corpus):
+    """
+    given a matchings corresponding to some request on the corpus,
+    return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
+    within the corpus. n : node name, feature like 'Gender', values like 'Fem'
+    """
+    observation = Observation()
+    for m in matchings:
+        graph = corpus[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        for n in nodes:
+            N = graph[nodes[n]]  # feature structure of N
+            for k, v in N.items():
+                if (n, k) not in observation:
+                    observation[(n, k)] = dict()
+                observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
+    return observation
+    
+def feature_values_for_decision(matchings, corpus, param, nodes):
+    """
+    restrict feature values to those useful for a decision tree
+    """
+    observation = feature_value_occurences(matchings, corpus)
+    features = dict()
+    for (n,k) in observation:
+        if n in nodes and k not in param["skip_features"]:
+            for v in zipf(observation, n, k, param):
+                features[(n,k,v)] = observation[(n,k)][v]
+    return features
+
+feature_factor = {"lemma" : 0.25, 'wordform':0.25}
+
+def create_classifier(matchings, pos, corpus, param):
+    """
+    builds a decision tree classifier
+    matchings: the matching on the two nodes X, Y
+    we compute the class mapping (feature values of X, feature values of Y) to the edge between X and Y
+    pos: maps a triple (node=X or Y, feature=Gen, feature_value=Fem) to a column number
+    corpus serves to get back graphs
+    param contains hyperparameter
+    """
+    X, y1, y = list(), dict(), list()
+    # X: set of input values, as a list of (0,1)
+    # y: set of output values, an index associated to the edge e
+    # the absence of an edge has its own index
+    # y1: the mapping between an edge e to some index
+    for m in matchings:
+        # each matching will lead to an obs which is a list of 0/1 values
+        graph = corpus[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        obs = [0]*len(pos)
+        for n in nodes:
+            feat = graph[nodes[n]]
+            for k, v in feat.items():
+                if (n, k, v) in pos:
+                    obs[pos[(n, k, v)]] = feature_factor.get(k,"1")
+        es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
+        if len(es) > 1:
+            print("mmmmhh that should not happen")
+        elif len(es) <= 1:
+            e = es.pop() if es else None
+            if e not in y1:
+                y1[e] = len(y1)
+            y.append(y1[e])
+            X.append(obs)
+    return get_tree(X, y, param), {y1[i]: i for i in y1}
+
+
+def find_classes(clf, param):
+    """
+    given a decision tree, extract "interesting" branches
+    the output is a dict mapping the node_index to its branch
+    a branch is the list of intermediate constraints = (7,1,8,0,...)
+    that is feature value 7 has without clause whereas feature 8 is positive 
+    """
+    def branches(pos, tree, current, acc, threshold):
+        if tree.feature[pos] >= 0:
+            if tree.impurity[pos] < threshold:
+                acc[pos] = current
+                return
+            # there is a feature
+            if tree.children_left[pos] >= 0:
+                # there is a child
+                left = current + ((tree.feature[pos], 1),)
+                branches(tree.children_left[pos], tree, left, acc, threshold)
+            if tree.children_right[pos] >= 0:
+                right = current + ((tree.feature[pos], 0),)
+                branches(tree.children_right[pos], tree, right, acc, threshold)
+            return
+        else:
+            if tree.impurity[pos] < threshold:
+                acc[pos] = current
+    tree = clf.tree_
+    acc = dict()
+    branches(0, tree, tuple(), acc, param["node_impurity"])
+    return acc
+
+
 def refine_rule(R, corpus, param, rank) -> list[Rule]:
     """
     Takes a request R, tries to find variants
+
     the result is the list of rules that refine pattern R
     for DEBUG, we return the decision tree classifier
     """
     res = []
-    classifier = Classifier(R, corpus, param)
-    if classifier.clf:
-        branches = classifier.find_classes(param)  # extract interesting branches
+    matchings = corpus.search(R)
+    fpat = list(feature_values_for_decision(matchings, corpus, param, ['X', 'Y']).keys())  # the list of all feature values
+    pos = {fpat[i]: i for i in range(len(fpat))}
+    clf, y1 = create_classifier(matchings, pos, corpus, param)
+    if clf:
+        branches = find_classes(clf, param)  # extract interesting branches
         for node in branches:
             branch = branches[node]
             request = Request(R)  # builds a new Request
             for feature_index, negative in branch:
-                n, feat, feat_value = classifier.mapping[feature_index]
+                n, feat, feat_value = fpat[feature_index]
                 feat_value = feat_value.replace('"', '\\"')
                 if negative:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
                     request.append("pattern", f'{n}[{feat}="{feat_value}"]')
-            e = y1[self.clf.tree_.value[node].argmax()]
+            e = y1[clf.tree_.value[node].argmax()]
             if e:  # here, e == None if there is no edges X -> Y
                 e["rank"] = rank
                 rule = Rule(request, Commands(Add_edge("X", e, "Y")))
                 res.append(rule)
-    return res, classifier.clf
+    return res, clf
 
 
 def refine_rules(Rs, corpus, param, rank, debug=False):
@@ -218,6 +267,7 @@ def refine_rules(Rs, corpus, param, rank, debug=False):
         else:
             Rse[rule_name] = R
     return Rse
+
 
 """
 Operations on the corpus, compute SPAN, ANCESTOR, remove working edges, label edges with default rank
