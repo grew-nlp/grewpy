@@ -43,7 +43,6 @@ class WorkingGRS(GRSDraft):
         return self
 
 
-
 def build_rules(sketch, observation, param, rule_name, rank_level=0):
     """
     search a rule adding an edge X -> Y, given a sketch  
@@ -76,8 +75,6 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
                             f"_{'_'.join(parameter)}_{rule_name}")
             rules[rn] = (R, (x, (v, s)))
     return rules
-
-feature_factor = {"lemma" : 100, 'wordform':20}
 
 
 def get_tree(X, y, param):
@@ -128,7 +125,7 @@ def feature_value_occurences(matchings, corpus):
                     observation[(n, k)] = dict()
                 observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
     return observation
-    
+
 def feature_values_for_decision(matchings, corpus, param, nodes):
     """
     restrict feature values to those useful for a decision tree
@@ -141,52 +138,40 @@ def feature_values_for_decision(matchings, corpus, param, nodes):
                 features[(n,k,v)] = observation[(n,k)][v]
     return features
 
-feature_factor = {"lemma" : 0.25, 'wordform':0.25}
+class Classifier():
+    def __init__(self, matchings, corpus, param):
+        fpat = list(feature_values_for_decision(matchings, corpus, param, ['X', 'Y']).keys())  
+        # get the list of all feature values
+        pos = {fpat[i]: i for i in range(len(fpat))}
+        X, y1, y = list(), dict(), list()
+        # X: set of input values, as a list of (0,1)
+        # y: set of output values, an index associated to the edge e
+        # the absence of an edge has its own index
+        # y1: the mapping between an edge e to some index
+        for m in matchings:
+            # each matching will lead to an obs which is a list of 0/1 values
+            graph = corpus[m["sent_id"]]
+            nodes = m['matching']['nodes']
+            obs = [0]*len(pos)
+            for n in nodes:
+                feat = graph[nodes[n]]
+                for k, v in feat.items():
+                    if (n, k, v) in pos:
+                        obs[pos[(n, k, v)]] = 1
+            es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
+            if len(es) > 1:
+                print("mmmmhh that should not happen")
+            elif len(es) <= 1:
+                e = es.pop() if es else None
+                if e not in y1:
+                    y1[e] = len(y1)
+                y.append(y1[e])
+                X.append(obs)
+        self.clf = get_tree(X, y, param)
+        self.y1 = {y1[i]: i for i in y1}
 
-def create_classifier(matchings, pos, corpus, param):
-    """
-    builds a decision tree classifier
-    matchings: the matching on the two nodes X, Y
-    we compute the class mapping (feature values of X, feature values of Y) to the edge between X and Y
-    pos: maps a triple (node=X or Y, feature=Gen, feature_value=Fem) to a column number
-    corpus serves to get back graphs
-    param contains hyperparameter
-    """
-    X, y1, y = list(), dict(), list()
-    # X: set of input values, as a list of (0,1)
-    # y: set of output values, an index associated to the edge e
-    # the absence of an edge has its own index
-    # y1: the mapping between an edge e to some index
-    for m in matchings:
-        # each matching will lead to an obs which is a list of 0/1 values
-        graph = corpus[m["sent_id"]]
-        nodes = m['matching']['nodes']
-        obs = [0]*len(pos)
-        for n in nodes:
-            feat = graph[nodes[n]]
-            for k, v in feat.items():
-                if (n, k, v) in pos:
-                    obs[pos[(n, k, v)]] = feature_factor.get(k,"1")
-        es = {e for e in graph.edges(nodes['X'], nodes['Y']) if "rank" in e}
-        if len(es) > 1:
-            print("mmmmhh that should not happen")
-        elif len(es) <= 1:
-            e = es.pop() if es else None
-            if e not in y1:
-                y1[e] = len(y1)
-            y.append(y1[e])
-            X.append(obs)
-    return get_tree(X, y, param), {y1[i]: i for i in y1}
-
-
-def find_classes(clf, param):
-    """
-    given a decision tree, extract "interesting" branches
-    the output is a dict mapping the node_index to its branch
-    a branch is the list of intermediate constraints = (7,1,8,0,...)
-    that is feature value 7 has without clause whereas feature 8 is positive 
-    """
-    def branches(pos, tree, current, acc, threshold):
+    def branches(self, pos, current, acc, threshold):
+        tree = self.clf.tree_
         if tree.feature[pos] >= 0:
             if tree.impurity[pos] < threshold:
                 acc[pos] = current
@@ -195,18 +180,27 @@ def find_classes(clf, param):
             if tree.children_left[pos] >= 0:
                 # there is a child
                 left = current + ((tree.feature[pos], 1),)
-                branches(tree.children_left[pos], tree, left, acc, threshold)
+                self.branches(tree.children_left[pos],
+                             left, acc, threshold)
             if tree.children_right[pos] >= 0:
                 right = current + ((tree.feature[pos], 0),)
-                branches(tree.children_right[pos], tree, right, acc, threshold)
+                self.branches(tree.children_right[pos],
+                             right, acc, threshold)
             return
         else:
             if tree.impurity[pos] < threshold:
                 acc[pos] = current
-    tree = clf.tree_
-    acc = dict()
-    branches(0, tree, tuple(), acc, param["node_impurity"])
-    return acc
+
+    def find_classes(clf, param):
+        """
+    given a decision tree, extract "interesting" branches
+    the output is a dict mapping the node_index to its branch
+    a branch is the list of intermediate constraints = (7,1,8,0,...)
+    that is feature value 7 has without clause whereas feature 8 is positive 
+        """        
+        acc = dict()
+        clf.branches(0, tuple(), acc, param["node_impurity"])
+        return acc
 
 
 def refine_rule(R, corpus, param, rank) -> list[Rule]:
@@ -220,9 +214,9 @@ def refine_rule(R, corpus, param, rank) -> list[Rule]:
     matchings = corpus.search(R)
     fpat = list(feature_values_for_decision(matchings, corpus, param, ['X', 'Y']).keys())  # the list of all feature values
     pos = {fpat[i]: i for i in range(len(fpat))}
-    clf, y1 = create_classifier(matchings, pos, corpus, param)
-    if clf:
-        branches = find_classes(clf, param)  # extract interesting branches
+    clf = Classifier(matchings, corpus, param)
+    if clf.clf:
+        branches = clf.find_classes(param)  # extract interesting branches
         for node in branches:
             branch = branches[node]
             request = Request(R)  # builds a new Request
@@ -233,7 +227,7 @@ def refine_rule(R, corpus, param, rank) -> list[Rule]:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
                     request.append("pattern", f'{n}[{feat}="{feat_value}"]')
-            e = y1[clf.tree_.value[node].argmax()]
+            e = clf.y1[clf.clf.tree_.value[node].argmax()]
             if e:  # here, e == None if there is no edges X -> Y
                 e["rank"] = rank
                 rule = Rule(request, Commands(Add_edge("X", e, "Y")))
@@ -325,7 +319,6 @@ def add_rank(g):
         if n in g.sucs:
             g.sucs[n] = [(m, add_null_rank(e)) for (m, e) in g.sucs[n]]
     return g
-
 
 """
 Operations on computations
