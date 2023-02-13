@@ -76,38 +76,6 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             rules[rn] = (R, (x, (v, s)))
     return rules
 
-
-def get_tree(X, y, param):
-    """
-    build a decision tree based on observation X,y
-    given hyperparameter within param
-    """
-    if not X or not len(X[0]):
-        return None
-    if max(y) == 0:
-        return None
-    clf = DecisionTreeClassifier(max_depth=param["max_depth"],
-                                 max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
-                                 min_samples_leaf=param["min_samples_leaf"],
-                                 criterion="gini")
-    clf.fit(X, y)
-    return clf
-
-
-def zipf(observation, n, k, param):
-    """
-    output the list of feature values of interest
-    """
-    if len(observation[(n,k)]) < 1:
-        return [] #no values or 1 is not sufficient
-    values = list(observation[(n,k)].keys())
-    values.sort(reverse=True)
-    occs = sum([observation[(n,k)][v] for v in values])
-    zoccs = sum([observation[(n,k)][v] for v in values[0:param["feat_value_size_limit"]]])
-    if zoccs/occs > param["zipf_feature_criterion"]:
-        return values[0:param["feat_value_size_limit"]]
-    return []
-
 def feature_value_occurences(matchings, corpus):
     """
     given a matchings corresponding to some request on the corpus,
@@ -134,7 +102,7 @@ def feature_values_for_decision(matchings, corpus, param, nodes):
     features = dict()
     for (n,k) in observation:
         if n in nodes and k not in param["skip_features"]:
-            for v in zipf(observation, n, k, param):
+            for v in observation.zipf(n, k, param["feat_value_size_limit"], param["zipf_feature_criterion"]):
                 features[(n,k,v)] = observation[(n,k)][v]
     return features
 
@@ -167,8 +135,16 @@ class Classifier():
                     y1[e] = len(y1)
                 y.append(y1[e])
                 X.append(obs)
-        self.clf = get_tree(X, y, param)
-        self.y1 = {y1[i]: i for i in y1}
+        if not X or not len(X[0]) or max(y) == 0:
+            self.clf = None
+        else:
+            self.clf = DecisionTreeClassifier(max_depth=param["max_depth"],
+                                     max_leaf_nodes=max(
+                                         y)+param["number_of_extra_leaves"],
+                                     min_samples_leaf=param["min_samples_leaf"],
+                                     criterion="gini")
+            self.clf.fit(X,y)
+            self.y1 = {y1[i]: i for i in y1}
 
     def branches(self, pos, current, acc, threshold):
         tree = self.clf.tree_
