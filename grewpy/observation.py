@@ -64,8 +64,8 @@ class Observation:
   
     def zipf(observation, n, k, width, ratio):
         """
-        output the list of width best features
-        if beyond ratio
+        return the list of width best features
+        if they are beyond ratio
         """
         if len(observation[(n, k)]) < 1:
             return []  # no values or 1 is not sufficient

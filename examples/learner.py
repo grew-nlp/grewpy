@@ -298,8 +298,8 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     sadj = dict()    
     sadj["adjacent_lr"] = simple_sketch(Request("X[];Y[];X<Y"))
     sadj["adjacent_rl"] = simple_sketch(Request("X[];Y[];Y<X"))
-    sadj["no_intermediate_1"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;X.upos=Z.upos"))
-    sadj["no_intermediate_2"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<X;Y.upos=Z.upos"))
+    sadj["no_intermediate_1"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<Y;X.upos=Z.upos"))
+    sadj["no_intermediate_2"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<Y;Y.upos=Z.upos"))
     sadj["no_intermediate_3"] = simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;Y.upos=Z.upos")) 
     sadj["no_intermediate_4"]=simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
     return apply_sketches(sadj, corpus, param, 0)    
@@ -356,6 +356,20 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
             rank_level=rank_n+1)
             cpt += 1
     return rules
+
+def rule_analysis(Rs, DRs, corpus):
+    """
+    find rule agreement/disagreement
+    """
+    applications = CorpusDraft()
+    for R in DRs.rules():
+        applications[R] = CorpusDraft({sid : Rs.run(corpus[sid], f'Onf({R})')[0] for sid in corpus})
+    matrix = dict()
+    for R in DRs.rules():
+        for S in DRs.rules():
+            matrix[(R,S)] = applications[R].edge_diff_up_to(applications[S], remove_rank)
+    return matrix
+
 
 def prepare_corpus(filename):
     corpus = CorpusDraft(filename)
@@ -428,6 +442,22 @@ if __name__ == "__main__":
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold, remove_rank))
 
+    """
+    confusion_matrix = rule_analysis(packages[0], draft_packages[0], corpus_empty)
+    f = open("matrix.csv", "w")
+    f.write(";" + ";".join(draft_packages[0].rules()))
+    for R in draft_packages[0].rules():
+        f.write(f"\n{R};")
+        f.flush()
+        for S in draft_packages[0].rules():
+            a = confusion_matrix[(R, S)]
+            f.write(f"{a['common']}/{a['left']}/{a['right']}")
+            f.write(";")
+            f.flush()
+    f.close()
+    """
+
+
     for rank in range(1, 4):
         corpus_gold_after_step = update_gold_rank(corpus_gold, currently_computed_corpus, rank)
         Rnext = rank_n_plus_one(corpus_gold_after_step, param, rank - 1)
@@ -445,6 +475,7 @@ if __name__ == "__main__":
         computed_corpus_eval = get_best_solution(corpus_gold_eval, computed_corpus_eval, packages[rank])
         print(computed_corpus_eval.edge_diff_up_to(corpus_gold_eval, remove_rank))
         computed_corpus_eval = remove_wrong_edges(computed_corpus_eval, corpus_gold_eval)
+
 
     for rank in range(4):
         print(f"--------R{rank} rules------")
