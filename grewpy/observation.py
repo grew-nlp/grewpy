@@ -62,17 +62,17 @@ class Observation:
         return None, None, None
 
   
-    def zipf(observation, n, k, param):
+    def zipf(observation, n, k, width, ratio):
         """
-        output the list of feature values of interest
+        output the list of width best features
+        if beyond ratio
         """
         if len(observation[(n, k)]) < 1:
             return []  # no values or 1 is not sufficient
         values = list(observation[(n, k)].keys())
         values.sort(reverse=True)
         occs = sum([observation[(n, k)][v] for v in values])
-        zoccs = sum([observation[(n, k)][v]
-                     for v in values[0:param["feat_value_size_limit"]]])
-        if zoccs/occs > param["zipf_feature_criterion"]:
-            return values[:param["feat_value_size_limit"]]
+        zoccs = sum([observation[(n, k)][v] for v in values[0:width]])
+        if zoccs/occs > ratio:
+            return values[:width]
         return []
