@@ -61,17 +61,7 @@ class Observation:
                 return (x,v,s)
         return None, None, None
 
-    @staticmethod
-    def feature_value_occurences(matchings, corpus):
-        """
-        given a matchings corresponding to some request on the corpus,
-        return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
-        within the corpus. n : node name, feature like 'Gender', values like 'Fem'
-        TO BE REMOVED
-        """
-        ...
-   
-
+  
     def zipf(observation, n, k, param):
         """
         output the list of feature values of interest

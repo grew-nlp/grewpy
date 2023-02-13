@@ -60,6 +60,11 @@ def get_tree(X, y, param):
 
 class Classifier():
     def __init__(self, R, corpus, param):
+        """
+        build a tree classifier with
+        extra mapping from y => int
+        and fpat : (node, feature, feature_value) => occurrences
+        """
         matchings = corpus.search(R, flat="matchings")
         fpat = matchings.feature_values(['X', 'Y'])  # the list of all feature values
         fpat = {(n,k,v): fpat[(n,k)][v] for (n,k) in fpat.obs for v in fpat.obs[(n,k)] if k not in param["skip_features"]}
@@ -91,6 +96,7 @@ class Classifier():
                     X.append(obs)
         self.clf = get_tree(X,y,param)
         self.mapping = {y1[i]: i for i in y1}
+        self.fpat = fpat
 
     def find_classes(clf, param):
         """
@@ -116,7 +122,7 @@ class Classifier():
             else:
                 if tree.impurity[pos] < threshold:
                     acc[pos] = current
-        tree = clf.tree_
+        tree = clf.clf.tree_
         acc = dict()
         branches(0, tree, tuple(), acc, param["node_impurity"])
         return acc
@@ -172,13 +178,13 @@ def refine_rule(R, corpus, param, rank) -> list[Rule]:
             branch = branches[node]
             request = Request(R)  # builds a new Request
             for feature_index, negative in branch:
-                n, feat, feat_value = fpat[feature_index]
+                n, feat, feat_value = classifier.mapping[feature_index]
                 feat_value = feat_value.replace('"', '\\"')
                 if negative:
                     request = request.without(f'{n}[{feat}="{feat_value}"]')
                 else:
                     request.append("pattern", f'{n}[{feat}="{feat_value}"]')
-            e = y1[clf.tree_.value[node].argmax()]
+            e = y1[self.clf.tree_.value[node].argmax()]
             if e:  # here, e == None if there is no edges X -> Y
                 e["rank"] = rank
                 rule = Rule(request, Commands(Add_edge("X", e, "Y")))
