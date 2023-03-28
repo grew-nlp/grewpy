@@ -4,6 +4,8 @@ Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
 import os.path
+import glob
+
 import sys
 import tempfile
 import json
@@ -117,6 +119,11 @@ class Corpus(AbstractCorpus):
         elif isinstance(data, dict):
             req = {"command": "corpus_from_dict", "graphs": {
                 sent_id: graph.json_data() for (sent_id, graph) in data.items()}}
+            reply = network.send_and_receive(req)
+        elif os.path.isdir(data):
+            # load of connlu files of the directory
+            file_list = glob.glob(f"{data}/*.conllu")
+            req = {"command": "corpus_load", "files": file_list}
             reply = network.send_and_receive(req)
         elif os.path.isfile(data):
             req = {"command": "corpus_load", "files": [data]}
