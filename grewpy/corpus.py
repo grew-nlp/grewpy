@@ -146,6 +146,13 @@ class Corpus(AbstractCorpus):
         """
         return self._id
 
+    def clean(self):
+        """
+        clean the corpus (remove from the backend memory)
+        """
+        req = {"command": "corpus_clean", "corpus_index": self._id}
+        return network.send_and_receive(req)
+
     def get(self, sent_id):
         """
         return a graph corresponding to the sentence id sent_id
