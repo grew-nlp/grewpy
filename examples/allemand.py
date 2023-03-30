@@ -34,18 +34,22 @@ res = corpus.search(req_root_verb)
 corpus_filtered = Corpus({item["sent_id"] : corpus[item["sent_id"]] for item in res})
 print(len(corpus_filtered))
 pos2 = Request("R-[root]->V;V[upos=VERB|AUX];V-[^punct|discourse|cc]->L;L<<V")\
-    .without("V-[^punct|discourse|cc]->L2;L2<<V")
+    .without("V-[^punct|discourse|cc]->L2;L2<<V").without(
+    "V->T;T->L;V<<T;L<<V"
+    )
 pos3 = Request("R-[root]->V;V[upos=VERB|AUX];V-[^punct|discourse|cc]->L1;L1<<V;V-[^punct|discourse|cc]->L2;L2<<L1")\
     .without("V-[^punct|discourse|cc]->L3;L2<<L3;L3<<V")
-pos1 = Request("R-[root]->V;V[upos=VERB|AUX]")\
-               .without("V-[^punct|discourse|cc]->L;L<<V")
-ppos1 = Request("R-[root]->V;V[upos=VERB|AUX]")\
-               .without("V-[^punct|discourse|cc]->L;L<<V")
+pos1 = Request("R-[root]->V;V[upos=VERB|AUX]").without("V-[^punct|discourse|cc]->L;L<<V").without(
+    "V[Mood=Imp]")
+ppos1 = Request("R-[root]->V;V[upos=VERB|AUX]").without(
+    "V-[^punct|discourse|cc]->L;L<<V").without(
+    "V -> T;T -> L;V << T;L << V")
 gauche0 = corpus_filtered.count(pos1)
+ggauche0 = corpus_filtered.count(ppos1)
 gauche1 = corpus_filtered.count(pos2)
 gauche2p = corpus_filtered.search(pos3)
 
-print(f"zero = {gauche0}, 1 = {gauche1}, 2 = {len(gauche2p)}")
+print(f"zero = {gauche0}, zero = {ggauche0},1 = {gauche1}, 2 = {len(gauche2p)}")
 print(gauche2p[0:10])
 
 
