@@ -63,7 +63,6 @@ class CorpusDraft(AbstractCorpus,dict):
     def __init__(self,data=None):
         """Load a corpus from a file of a string
         :param data: a file, a list of files or a CoNLL string representation of a corpus
-        :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
@@ -104,7 +103,6 @@ class Corpus(AbstractCorpus):
     def __init__(self, data):
         """An abstract corpus
         :param data: a file, a list of files or a CoNLL string representation of a corpus
-        :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
