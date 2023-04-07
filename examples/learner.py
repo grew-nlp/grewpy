@@ -63,14 +63,12 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
     some edge e occuring at least with probability base_threshold
     in which case, we define a rule R: 
     base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
-    """                
+    """
     def crit_to_request(crit, val):
         if ".label" in crit:
             edge_name = re.match("(.*?).label", crit).group(1)
             clauses = Fs_edge.decompose_edge(edge_name)
-            return ";".join((f"{edge_name}.{a}={b}" for a,b in clauses.items()))
-            clauses = Fs_edge.decompose_edge(edge_name)
-            return ";".join((f"{edge_name}.{a}={b}" for a,b in clauses.items()))
+            return ";".join((f"{edge_name}.{a}={b}" for a, b in clauses.items()))
         return f"{crit}={val}"
     rules = WorkingGRS()
     for parameter in observation:
@@ -79,13 +77,13 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             extra_pattern = [crit_to_request(crit, val) for (
                 crit, val) in zip(sketch.cluster_criterion, parameter)]
             P = Request(sketch.P, *extra_pattern)
-            x0 = Fs_edge(x[0])#{k:v for k,v in x}
+            x0 = Fs_edge(x[0])  # {k:v for k,v in x}
             x0['rank'] = rank_level
             #x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
             c = Add_edge("X", x0, "Y")
             R = Rule(P, Commands(c))
             rn = re.sub("[.,=\"]", "",
-                            f"_{'_'.join(parameter)}_{rule_name}")
+                        f"_{'_'.join(parameter)}_{rule_name}")
             rules[rn] = (R, (x, (v, s)))
     return rules
 
