@@ -1,9 +1,12 @@
 from sklearn import tree
 from sklearn.tree import DecisionTreeClassifier
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
 import math
 import numpy as np
 import re
 import argparse
+import pickle
 
 # Use local grew lib
 import os, sys
@@ -13,6 +16,8 @@ from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
 from grewpy import Corpus, GRS, set_config
 from grewpy.observation import Observation
 from grewpy.sketch import Sketch
+from grewpy import grew_web
+from grewpy.graph import Fs_edge
 
 import classifier
 
@@ -53,15 +58,12 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
     some edge e occuring at least with probability base_threshold
     in which case, we define a rule R: 
     base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
-    """
+    """        
     def crit_to_request(crit, val):
         if ".label" in crit:
             edge_name = re.match("(.*?).label", crit).group(1)
-            clauses = []
-            for it in val.split(","):
-                a, b = it.split("=")
-                clauses.append(f'{edge_name}.{a}="{b}"')
-            return ";".join(clauses)
+            clauses = Fs_edge.decompose_edge(edge_name)
+            return ";".join((f"{edge_name}.{a}={b}" for a,b in clauses.items()))
         return f"{crit}={val}"
     rules = WorkingGRS()
     for parameter in observation:
@@ -70,8 +72,10 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             extra_pattern = [crit_to_request(crit, val) for (
                 crit, val) in zip(sketch.cluster_criterion, parameter)]
             P = Request(sketch.P, *extra_pattern)
-            x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
-            c = Add_edge("X", x, "Y")
+            x0 = Fs_edge(x[0])#{k:v for k,v in x}
+            x0['rank'] = rank_level
+            #x = x[0].replace(f"rank=_", f'rank="{rank_level}"')
+            c = Add_edge("X", x0, "Y")
             R = Rule(P, Commands(c))
             rn = re.sub("[.,=\"]", "",
                             f"_{'_'.join(parameter)}_{rule_name}")
@@ -163,6 +167,7 @@ def add_ancestor_relation(g):
     """
     add the ancestor relation to g (supposed to be a tree)
     """
+    g._sucs = {i: g._sucs.get(i, []) for i in g}
     todo = [(i, i) for i in g]
     while todo:
         n, m = todo.pop()
@@ -259,7 +264,7 @@ def remove_wrong_edges(corpus, corpus_gold):
     for sid in new_corpus:
         g_gold = corpus_gold[sid]
         g_corp = new_corpus[sid]
-        for n in g_corp:
+        for n in g_corp._sucs:
             old_edges = g_corp.sucs[n]
             g_corp.sucs[n] = []
             for (m, e) in old_edges:
@@ -307,6 +312,8 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
 def span_sketch(r):
     return Sketch(r, ["X.upos", "Y.upos","Z.upos"], edge_between_X_and_Y, no_edge_between_X_and_Y, "e.label")
 
+
+"""
 def span_rules(corpus, param):
     sketches = dict()
     sketches["span_Zlr"] = span_sketch(Request("X[];Y[];X -[LEFT_SPAN]->Z;Z<Y;"))
@@ -330,7 +337,7 @@ def ancestor_rules(corpus, param):
     sketches["span_ancestor_zy"] = span_sketch(Request("X[];Y[];Y-[LEFT_SPAN]->T;X-[ANCESTOR]->Z;Z<T"))
     sketches["span_ancestor_yz"]= span_sketch(Request("X[];Y[];Y-[RIGHT_SPAN]->T;X-[ANCESTOR]->Z;T<Z"))
     return apply_sketches(sketches, corpus, param, 0)
-
+"""
 def rank_n_plus_one(corpus_gold, param, rank_n):
     """
     build rules for corpus
@@ -339,46 +346,36 @@ def rank_n_plus_one(corpus_gold, param, rank_n):
     corpus = Corpus(corpus_gold)
     nodes = ['f:X -> Z', 'f:Y -> Z', 'f:Z->X', 'f:Z->Y']
     ordres = ['X<Y', 'X>Y', 'Z<Y', 'Z>Y', 'X<Z', 'X>Z']
+    on_label = [("Z.upos",),("f.label",),tuple()]
     sketches = dict()
     for ns in nodes:
         for o in ordres:
-            for rank in range(0,rank_n+1):
-                sketches[(ns,o,rank)] = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank}"'), 
-                ["X.upos", "Y.upos"], edge_between_X_and_Y, no_edge_between_X_and_Y, "e.label")
+            for extra in on_label:
+                for rank in range(0,rank_n+1):
+                    sketches[(ns,o,extra,rank)] = Sketch(Request('X[];Y[]', ns, o, f'f.rank="{rank}"'), 
+                ["X.upos", "Y.upos"] + list(extra), edge_between_X_and_Y, no_edge_between_X_and_Y, "e.label")
     
     cpt = 1
     for ns in nodes:
         for o in ordres:
-            obs = Observation()
-            for rank in range(0, rank_n+1):
-                obs |= sketches[(ns,o,rank)].cluster(corpus)
-            rules |= build_rules(sketches[(ns,o,rank_n)], obs, param, f"rank_{rank_n}_{cpt}", 
-            rank_level=rank_n+1)
-            cpt += 1
+            for extra in on_label:
+                obs = Observation()
+                for rank in range(0, rank_n+1):
+                    obs |= sketches[(ns,o,extra,rank)].cluster(corpus)
+                rules |= build_rules(sketches[(ns,o,extra,rank_n)], obs, param, f"rank_{rank_n}_{cpt}", 
+                rank_level=rank_n+1)
+                cpt += 1
     return rules
-
-def rule_analysis(Rs, DRs, corpus):
-    """
-    find rule agreement/disagreement
-    """
-    applications = CorpusDraft()
-    for R in DRs.rules():
-        applications[R] = CorpusDraft({sid : Rs.run(corpus[sid], f'Onf({R})')[0] for sid in corpus})
-    matrix = dict()
-    for R in DRs.rules():
-        for S in DRs.rules():
-            matrix[(R,S)] = applications[R].edge_diff_up_to(applications[S], remove_rank)
-    return matrix
-
 
 def prepare_corpus(filename):
     corpus = CorpusDraft(filename)
     corpus = corpus.apply(add_rank)  # append rank label on edges
-    corpus = corpus.apply(add_span)  # span
-    corpus = Corpus(corpus.apply(add_ancestor_relation))
+    #corpus = corpus.apply(add_span)  # span
+    #corpus = corpus.apply(add_ancestor_relation)
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
+    corpus = Corpus(corpus)
+    #empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     return corpus, empty
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
@@ -398,14 +395,18 @@ if __name__ == "__main__":
         "max_depth": 4,
         "min_samples_leaf": 5,
         "feat_value_size_limit": 10,
-        "skip_features": ['xpos', 'upos', 'SpaceAfter'],
+        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared'],
         "node_impurity": 0.2,
         "number_of_extra_leaves": 5, 
         "zipf_feature_criterion" : 0.95, 
         "min_occurrence_nb" : 10
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
-
+    web = grew_web.Grew_web()
+    
+    web.load_corpus(corpus_empty)  # to get a few samples in the corpus
+    print(web.url())
+    
     packages = []#list the packages according to their rank 
     draft_packages = [] #list the draft versions of the packages
 
@@ -422,6 +423,7 @@ if __name__ == "__main__":
     c = get_best_solution(corpus_gold, corpus_empty, R0e_test)
     print(c.edge_diff_up_to(corpus_gold,remove_rank))
 
+    """
     Rs0 = span_rules(corpus_gold, param)
     Rs0e = refine_rules(Rs0, corpus_gold, param, 0)
     Rs0e_t = GRS(Rs0e.safe_rules().onf())
@@ -435,7 +437,9 @@ if __name__ == "__main__":
     print(f"ancestor rules after refinement {len(Rae0)}")
     c = get_best_solution(corpus_gold, corpus_empty, Ra0e_t)
     print(c.edge_diff_up_to(corpus_gold,remove_rank))
-
+    """
+    Rs0e = GRSDraft()
+    Rae0 = GRSDraft()
     draft_packages.append(GRSDraft(R0e | Rs0e | Rae0).safe_rules().onf())
     packages.append(GRS(draft_packages[-1]))
 
@@ -443,21 +447,19 @@ if __name__ == "__main__":
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold, remove_rank))
 
     """
-    confusion_matrix = rule_analysis(packages[0], draft_packages[0], corpus_empty)
-    f = open("matrix.csv", "w")
-    f.write(";" + ";".join(draft_packages[0].rules()))
-    for R in draft_packages[0].rules():
-        f.write(f"\n{R};")
-        f.flush()
-        for S in draft_packages[0].rules():
-            a = confusion_matrix[(R, S)]
-            f.write(f"{a['common']}/{a['left']}/{a['right']}")
-            f.write(";")
-            f.flush()
-    f.close()
+    zz,_,_ = rule_analysis(draft_packages[0], corpus_gold)
+    if zz['sub']:
+        print('subrules')
+        for a,b in zz['sub']:
+            print((a,b))
+        #print(zz['sub'])
+    else:
+        print('no subrules')
+    if zz['equiv']:
+        for k in zz['equiv']:
+            print(k)
+            print(zz['equiv'][k])
     """
-
-
     for rank in range(1, 4):
         corpus_gold_after_step = update_gold_rank(corpus_gold, currently_computed_corpus, rank)
         Rnext = rank_n_plus_one(corpus_gold_after_step, param, rank - 1)
@@ -479,4 +481,5 @@ if __name__ == "__main__":
 
     for rank in range(4):
         print(f"--------R{rank} rules------")
-        print(f"{draft_packages[rank]}")
+        #print(f"{draft_packages[rank]}")
+    pickle.dump(draft_packages, open("rules.pickle","wb"))
