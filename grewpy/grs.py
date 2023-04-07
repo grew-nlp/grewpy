@@ -122,7 +122,7 @@ class Command:
         return self.item
     
     def __str__(self):
-        return self.item
+        return str(self.item)
 
     def safe(self):
         """
@@ -141,6 +141,9 @@ class Add_edge(Command):
 
     def safe(self):           
         return RequestItem("without",self.item.replace("add_edge",""))
+    
+    def __repr__(self):
+        return str(self)
 
 class Delete_edge(Command):
     def __init__(self, X, e, Y):
