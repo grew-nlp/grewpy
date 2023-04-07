@@ -17,7 +17,12 @@ from . import network
 class Fs_edge(dict):
     def __init__(self,data):
         if isinstance(data,str):
-            super().__init__({"1": data})
+            #try to split a dict
+            if "=" in data and "," in data:
+                #suppose it is a dictionary
+                super().__init__(Fs_edge.decompose_edge(data))
+            else:
+                super().__init__({"1": data})
         elif isinstance(data, dict):
             super().__init__(data)
         else:
@@ -25,6 +30,14 @@ class Fs_edge(dict):
 
     def __hash__(self):
         return (hash (str(self)))
+    
+    @staticmethod
+    def decompose_edge(s):
+        clauses = dict()
+        for it in s.split(","):
+            a, b = it.split("=")
+            clauses[a] = b
+        return clauses
 
 class Graph():
     """
@@ -190,6 +203,8 @@ class Graph():
         given node n and m, 
         return the set of edges between n and m
         """
+        if n not in self._sucs:
+            return []
         return [v for (k,v) in self._sucs[n] if k == m]
 
     def edges_up_to(self, n, m, criterion):

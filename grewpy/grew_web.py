@@ -13,8 +13,8 @@ if local:
     grew_web_back = "http://localhost:8080"
     grew_web_front = "http://localhost:8888/grew_web"
 else:
-    grew_web_back = "http://back.grew.fr"
-    grew_web_front = "http://transform.grew.fr"
+    grew_web_back = "https://gwb.grew.fr"
+    grew_web_front = "https://web.grew.fr"
 
 
 def _post_request(service, resp):

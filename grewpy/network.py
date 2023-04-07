@@ -6,6 +6,7 @@ import socket
 import os.path
 import json
 import os
+import sys
 
 from .grew import GrewError
 
@@ -41,12 +42,12 @@ def init():
             #wait for grew's lib answer
             time.sleep(0.1)
             if caml.poll() == None:
-                print ("connected to port: " + str(port))
+                print ("connected to port: " + str(port), file=sys.stderr)
                 remote_ip = socket.gethostbyname(host)
                 return (caml)
             else:
                 port += 1
-        print ("Failed to connect 10 times!")
+        print ("Failed to connect 10 times!", file=sys.stderr)
         exit (1)
 
 def connect():
@@ -57,7 +58,7 @@ def connect():
     except socket.error:
         raise GrewError('Failed to create socket. Make sure that you have called grew.init.')
     except socket.gaierror:
-        print('[GREW] Hostname could not be resolved. Sorry\n')
+        print('[GREW] Hostname could not be resolved. Sorry\n', file=sys.stderr)
 
 
 packet_size=32768
