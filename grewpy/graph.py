@@ -35,8 +35,11 @@ class Fs_edge(dict):
     def decompose_edge(s):
         clauses = dict()
         for it in s.split(","):
-            a, b = it.split("=")
-            clauses[a] = b
+            try:
+                a, b = it.split("=")
+                clauses[a]=b
+            except ValueError:
+                clauses["1"] = s
         return clauses
 
 class Graph():

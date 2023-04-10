@@ -7,7 +7,6 @@ import numpy as np
 import re
 import argparse
 import pickle
-import pickle
 
 # Use local grew lib
 import os, sys
@@ -21,10 +20,8 @@ from grewpy import grew_web
 from grewpy.graph import Fs_edge
 
 import classifier
-from grewpy import grew_web
-from grewpy.graph import Fs_edge
 
-import classifier
+cpt = iter(range(1000000))
 
 is_working = lambda e : "rank" not in e
 
@@ -67,7 +64,7 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
     def crit_to_request(crit, val):
         if ".label" in crit:
             edge_name = re.match("(.*?).label", crit).group(1)
-            clauses = Fs_edge.decompose_edge(edge_name)
+            clauses = Fs_edge.decompose_edge(val)
             return ";".join((f"{edge_name}.{a}={b}" for a, b in clauses.items()))
         return f"{crit}={val}"
     rules = WorkingGRS()
@@ -269,9 +266,9 @@ def remove_wrong_edges(corpus, corpus_gold):
     for sid in new_corpus:
         g_gold = corpus_gold[sid]
         g_corp = new_corpus[sid]
-        for n in g_corp._sucs._sucs:
+        for n in g_corp._sucs:
             old_edges = g_corp.sucs[n]
-            g_corp.sucs[n] = []
+            g_corp._sucs[n] = []
             for (m, e) in old_edges:
                 gold_edges = g_gold.edges(n, m)
                 if extract_edge(gold_edges, e):
@@ -301,6 +298,11 @@ def apply_sketches(sketches, corpus, param, rank_level):
         rules |= build_rules(sketch, sketch.cluster(corpus), param, sketch_name, rank_level=rank_level)
     return rules
 
+def module_name(t):
+    x = str(t)
+    x = re.sub(r"['\(\),+<> :.]","",x)
+    return x
+
 def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     """
     build all adjacent rules. They are supposed to connect words at distance 1
@@ -312,11 +314,23 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     sadj["no_intermediate_2"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<Y;Y.upos=Z.upos"))
     sadj["no_intermediate_3"] = simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;Y.upos=Z.upos")) 
     sadj["no_intermediate_4"]=simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
+    
+    nodes = ['f:X -> Z', 'f:Y -> Z', 'f:Z->X', 'f:Z->Y']
+    ordres = ['X<Y', 'X>Y', 'Z<Y', 'Z>Y', 'X<Z', 'X>Z', 'Z<<Y', 'Z>>Y', 'X<<Z', 'X>>Z']
+    on_label = [("Z.upos",), ("f.label",), tuple()]
+    for ns in nodes:
+        for o in ordres:
+            for extra in on_label:
+                sadj[module_name((ns, o, extra, next(cpt)))] =\
+                Sketch(Request('X[];Y[]', ns, o),
+                ["X.upos", "Y.upos"] + list(extra), 
+                edge_between_X_and_Y, 
+                no_edge_between_X_and_Y, "e.label")
+
     return apply_sketches(sadj, corpus, param, 0)    
 
 def span_sketch(r):
     return Sketch(r, ["X.upos", "Y.upos","Z.upos"], edge_between_X_and_Y, no_edge_between_X_and_Y, "e.label")
-
 
 """
 def span_rules(corpus, param):
@@ -328,7 +342,7 @@ def span_rules(corpus, param):
     sketches["span_ZTlr"] = simple_sketch(Request("X[];Y[];Y -[LEFT_SPAN]->T;X-[LEFT_SPAN]->Z;Z<T"))
     sketches["span_ZTrl"] = simple_sketch(Request("X[];Y[];Y -[RIGHT_SPAN]->T;X-[RIGHT_SPAN]->Z;T<Z"))
     return apply_sketches(sketches, corpus, param, 0)
-
+"""
 
 def ancestor_rules(corpus, param):
     sketches = dict()
@@ -339,10 +353,10 @@ def ancestor_rules(corpus, param):
     sketches["yz_ancestor"] = span_sketch(Request("X[];Y[];Z-[ANCESTOR]->X;Y<Z"))
     sketches["zx_ancestor"] = span_sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;Z<X"))
     sketches["xz_ancestor"] = span_sketch(Request("X[];Y[];Z-[ANCESTOR]->Y;X<Z"))
-    sketches["span_ancestor_zy"] = span_sketch(Request("X[];Y[];Y-[LEFT_SPAN]->T;X-[ANCESTOR]->Z;Z<T"))
-    sketches["span_ancestor_yz"]= span_sketch(Request("X[];Y[];Y-[RIGHT_SPAN]->T;X-[ANCESTOR]->Z;T<Z"))
+    #sketches["span_ancestor_zy"] = span_sketch(Request("X[];Y[];Y-[LEFT_SPAN]->T;X-[ANCESTOR]->Z;Z<T"))
+    #sketches["span_ancestor_yz"]= span_sketch(Request("X[];Y[];Y-[RIGHT_SPAN]->T;X-[ANCESTOR]->Z;T<Z"))
     return apply_sketches(sketches, corpus, param, 0)
-"""
+
 def rank_n_plus_one(corpus_gold, param, rank_n):
     """
     build rules for corpus
@@ -376,7 +390,7 @@ def prepare_corpus(filename):
     corpus = CorpusDraft(filename)
     corpus = corpus.apply(add_rank)  # append rank label on edges
     #corpus = corpus.apply(add_span)  # span
-    #corpus = corpus.apply(add_ancestor_relation)
+    corpus = corpus.apply(add_ancestor_relation)
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     corpus = Corpus(corpus)
     #empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
@@ -459,6 +473,7 @@ if __name__ == "__main__":
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold, remove_rank))
 
+    """
     for rank in range(1, 4):
         corpus_gold_after_step = update_gold_rank(corpus_gold, currently_computed_corpus, rank)
         Rnext = rank_n_plus_one(corpus_gold_after_step, param, rank - 1)
@@ -482,3 +497,4 @@ if __name__ == "__main__":
         print(f"--------R{rank} rules------")
         #print(f"{draft_packages[rank]}")
     pickle.dump(draft_packages, open("rules.pickle","wb"))
+    """
