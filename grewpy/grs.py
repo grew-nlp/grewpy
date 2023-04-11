@@ -9,7 +9,7 @@ from .corpus import Corpus, CorpusDraft, GrewError
 class RequestItem():
     def __init__(self,sort : str,*L):
         """
-        sort in {"without", "pattern", "global"}
+        sort in {"global", "pattern", "without", "with"}
         L is a list of
          - ";" separated clauses or
          - a list of items
@@ -76,6 +76,10 @@ class Request():
         self.items += tuple(RequestItem("with", e) for e in L)
         return self
 
+
+    def with_(self, *L):
+        self.items += tuple(RequestItem("with", e) for e in L)
+        return self
 
     @classmethod
     def from_json(cls,json_data):
