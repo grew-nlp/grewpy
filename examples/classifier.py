@@ -64,8 +64,7 @@ class Classifier():
                 for k, v in feat.items():
                     if (n, k, v) in self.pos:
                         obs[self.pos[(n, k, v)]] = 1
-            es = {e for e in graph.edges(
-                nodes['X'], nodes['Y']) if "rank" in e}
+            es = graph.edges(nodes['X'], nodes['Y'])
             if len(es) > 1:
                 print("mmmmhh that should not happen")
             elif len(es) <= 1:

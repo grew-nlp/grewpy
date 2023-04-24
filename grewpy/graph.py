@@ -22,24 +22,43 @@ class Fs_edge(dict):
                 #suppose it is a dictionary
                 super().__init__(Fs_edge.decompose_edge(data))
             else:
-                super().__init__({"1": data})
+                super().__init__(Fs_edge.decompose_edge(data))
         elif isinstance(data, dict):
             super().__init__(data)
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
+    def __eq__(self, other):
+        for k,v in self.items():
+            if k not in other or v != other[k]:
+                return False
+        return len(self) == len(other)
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
     def __hash__(self):
-        return (hash (str(self)))
+        return hash(tuple((sorted(self.items()))))
     
     @staticmethod
     def decompose_edge(s):
+        def extract(u, clauses):
+            if '@' in u:
+                u, t = u.split('@')
+                clauses['deep'] = t
+            if ':' in u:
+                u,t = u.split(':')
+                clauses['1'] = u
+                clauses['2'] = t
+            else:
+                clauses['1'] = u
         clauses = dict()
         for it in s.split(","):
-            try:
-                a, b = it.split("=")
-                clauses[a]=b
-            except ValueError:
-                clauses["1"] = s
+            if '=' in s:
+                a,b = it.split("=")
+                clauses[a] = b
+            else:
+                extract(s,clauses)
         return clauses
 
 class Graph():
