@@ -12,7 +12,7 @@ import pickle
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
 
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Package
 from grewpy import Corpus, GRS, set_config
 from grewpy.sketch import Sketch
 from grewpy import grew_web
@@ -163,7 +163,7 @@ def get_best_solution(corpus_gold, corpus_start, grs):
     print(len(corpus_gold))
     i = 0
     for sid in corpus_gold:
-        if i % (len(corpus_gold)//100) == 0:
+        if i % (len(corpus_gold)//10) == 0:
             print(i)
         i += 1
         gs = grs.run(corpus_start[sid], 'main')
@@ -224,9 +224,22 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param, 0)    
 
+def append_head(g):
+    for n in g:
+        g[n]['head']='1'
+    return g
+
+def pack(s):
+    if re.search("f[XYZ]", s):
+        return 3
+    if re.search("intermediate", s):
+        return 2
+    if "enhanced" in s:
+        return 1
+    return 0
 
 def prepare_corpus(filename):
-    corpus = Corpus(filename)
+    corpus = Corpus(CorpusDraft(filename).apply(append_head))
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     return corpus, empty
 
@@ -248,7 +261,7 @@ if __name__ == "__main__":
         "max_depth": 4,
         "min_samples_leaf": 5,
         "feat_value_size_limit": 10,
-        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared'],
+        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared', 'head'],
         "node_impurity": 0.2,
         "number_of_extra_leaves": 5, 
         "zipf_feature_criterion" : 0.95, 
@@ -256,9 +269,6 @@ if __name__ == "__main__":
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
     
-    packages = []#list the packages according to their rank 
-    draft_packages = [] #list the draft versions of the packages
-
     A = corpus_gold.count(Request('X<Y;e:X->Y'))
     A += corpus_gold.count(Request('Y<X;e:X->Y'))
     print("---target----")
@@ -268,16 +278,19 @@ if __name__ == "__main__":
     R0 = adjacent_rules(corpus_gold, param)
     R0e = refine_rules(R0, corpus_gold, param, 0)
     print(f"number of rules len(R0e) = {len(R0e)}")
-    draft_packages.append(GRSDraft(R0e).safe_rules().onf())
-    pickle.dump( draft_packages, open("rules.pickle", "wb"))
-    packages.append(GRS(draft_packages[-1]))
+    #turn to a set of packages to speed up the process
+    packages = {f'P{i}' : Package() for i in range(4)}
+    for rn in R0e:
+        packages[pack(rn)][rn] = R0e[rn]
+    R00 = GRSDraft(packages)
+    R00['main'] = "Onf(Seq(P0,P1,P2,P3))"
+    G00 = GRS(R00)
+    pickle.dump( R00, open("rules.pickle", "wb"))
     
     web = grew_web.Grew_web()
     print(web.url())
     web.load_corpus(corpus_empty)
-    #web.load_grs(packages[0])
 
-    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, packages[0])
+    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, G00)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-    pickle.dump(draft_packages, open("rules.pickle","wb"))
 
