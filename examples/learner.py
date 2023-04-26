@@ -12,7 +12,7 @@ import pickle
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
 
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Package
+from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Package, Delete_feature
 from grewpy import Corpus, GRS, set_config
 from grewpy.sketch import Sketch
 from grewpy import grew_web
@@ -59,8 +59,8 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
         if ".label" in crit:
             edge_name = re.match("(.*?).label", crit).group(1)
             clauses = Fs_edge.decompose_edge(val)
-            return ";".join((f"{edge_name}.{a}={b}" for a, b in clauses.items()))
-        return f"{crit}={val}"
+            return ";".join((f'{edge_name}.{a}="{b}"' for a, b in clauses.items()))
+        return f'{crit}="{val}"'
     rules = WorkingGRS()
     for parameter in observation:
         x, v, s = observation.anomaly(parameter, param["base_threshold"])
@@ -70,7 +70,7 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             P = Request(sketch.P, *extra_pattern)
             x0 = Fs_edge(x[0])  # {k:v for k,v in x}
             c = Add_edge("X", x0, "Y")
-            R = Rule(P, Commands(c))
+            R = Rule(P,Commands(c))
             rn = module_name(f"_{'_'.join(parameter)}_{rule_name}")
             rules[rn] = (R, (x, (v, s)))
     return rules
@@ -127,7 +127,7 @@ def refine_rules(Rs, corpus, param, rank, debug=False):
                     if debug:
                         print("by : ")
                         print(r)
-                    X = ",".join(f'k="v"' for k,v in r.commands[0].e.items()) 
+                    X = ",".join(f'{k}="{v}"' for k,v in r.commands[0].e.items()) 
                     x1 = corpus.count(Request(r.request, f"X-[{X}]->Y"))
                     x2 = corpus.count(Request(r.request).without(f"X-[{X}]->Y"))
                     Rse[f"{rule_name}_enhanced{next(cpt)}"] = (r, x1/(x1+x2+1e-10))
@@ -198,19 +198,17 @@ def apply_sketches(sketches, corpus, param, rank_level):
         rules |= build_rules(sketch, sketch.cluster(corpus), param, sketch_name, rank_level=rank_level)
     return rules
 
-
-
 def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     """
     build all adjacent rules. They are supposed to connect words at distance 1
     """
     sadj = dict()    
-    sadj["adjacent_lr"] = simple_sketch(Request("X[];Y[];X<Y"))
-    sadj["adjacent_rl"] = simple_sketch(Request("X[];Y[];Y<X"))
-    sadj["no_intermediate_1"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<Y;X.upos=Z.upos"))
-    sadj["no_intermediate_2"] = simple_sketch(Request("X[];Y[];X<<Y").without("Z[];X<<Z;Z<<Y;Y.upos=Z.upos"))
-    sadj["no_intermediate_3"] = simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;Y.upos=Z.upos")) 
-    sadj["no_intermediate_4"]=simple_sketch(Request("X[];Y[];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
+    sadj["adjacent_lr"] = simple_sketch(Request("X[];Y[head];X<Y"))
+    sadj["adjacent_rl"] = simple_sketch(Request("X[];Y[head];Y<X"))
+    sadj["no_intermediate_1"] = simple_sketch(Request("X[];Y[head];X<<Y").without("Z[];X<<Z;Z<<Y;X.upos=Z.upos"))
+    sadj["no_intermediate_2"] = simple_sketch(Request("X[];Y[head];X<<Y").without("Z[];X<<Z;Z<<Y;Y.upos=Z.upos"))
+    sadj["no_intermediate_3"] = simple_sketch(Request("X[];Y[head];Y<<X").without("Z[];Y<<Z;Z<<X;Y.upos=Z.upos")) 
+    sadj["no_intermediate_4"]=simple_sketch(Request("X[];Y[head];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
     
     nodes = ['f:X -> Z', 'f:Y -> Z', 'f:Z->X', 'f:Z->Y']
     ordres = ['X<Y', 'X>Y', 'Z<Y', 'Z>Y', 'X<Z', 'X>Z', 'Z<<Y', 'Z>>Y', 'X<<Z', 'X>>Z']
@@ -219,7 +217,7 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
         for o in ordres:
             for extra in on_label:
                 sadj[module_name((ns, o, extra, next(cpt)))] =\
-                Sketch(Request('X[];Y[]', ns, o), ["X.upos", "Y.upos"] + list(extra), 
+                Sketch(Request('X[];Y[head]', ns, o), ["X.upos", "Y.upos"] + list(extra), 
                 edge_between_X_and_Y, 
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param, 0)    
@@ -250,6 +248,7 @@ if __name__ == "__main__":
 
     parser.add_argument('train')
     parser.add_argument('-e', '--eval', default=None)
+    parser.add_argument('--pickle', default=None)
     args = parser.parse_args()
     if not args.eval:
         args.eval = args.train
@@ -277,15 +276,20 @@ if __name__ == "__main__":
 
     R0 = adjacent_rules(corpus_gold, param)
     R0e = refine_rules(R0, corpus_gold, param, 0)
-    print(f"number of rules len(R0e) = {len(R0e)}")
-    #turn to a set of packages to speed up the process
+    R0safe = R0e.safe_rules()
+    for rn in R0safe:
+        R0safe[rn].commands.append(Delete_feature("Y", "head"))
+
+    print(f"number of rules len(R0e) = {len(R0safe)}")
+    #turn R0e to a set of packages to speed up the process
     packages = {f'P{i}' : Package() for i in range(4)}
-    for rn in R0e:
-        packages[pack(rn)][rn] = R0e[rn]
+    for rn in R0safe:
+        packages[f'P{pack(rn)}'][rn] = R0safe[rn]
     R00 = GRSDraft(packages)
-    R00['main'] = "Onf(Seq(P0,P1,P2,P3))"
+    R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3))"
+    if args.pickle:    
+        pickle.dump( R00, open(args.pickle, "wb"))
     G00 = GRS(R00)
-    pickle.dump( R00, open("rules.pickle", "wb"))
     
     web = grew_web.Grew_web()
     print(web.url())

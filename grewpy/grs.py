@@ -152,6 +152,12 @@ class Delete_edge(Command):
 
     def safe(self):           
         return RequestItem("pattern", self.item.replace("add_edge", ""))
+    
+class Delete_feature(Command):
+    def __init__(self, X, f):
+        super().__init__(f"del_feat {X}.{f}")
+        self.X = X
+        self.f = f
 
 
 class Commands(list):
