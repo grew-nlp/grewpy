@@ -26,6 +26,47 @@ def module_name(t):
     x = re.sub(r"['\(\),+<> \:.@]","",x)
     return x
 
+def edge_is(e,f):
+    """
+    tells whether e is an f
+    """
+    for k in e:
+        if k not in f:
+            return False
+        if e[k] not in f[k]:
+            return False
+    return True
+
+def corpus_diff(c1,c2):
+    c,l,r = 0,0,0
+    for sid in c1:
+        men = {m: (e, n) for n, e, m in c1[sid].triples()}
+        menp = {m : (e,n) for n,e, m in c2[sid].triples()}
+        S1 = set(men.keys())
+        S2 = set(menp.keys())
+        l += len(S1 - S2)
+        r += len(S2 - S1)
+        for m in S1 & S2:
+            e,n = men[m]
+            ep,np = menp[m]
+            if n != np or not edge_is(ep,e):
+                l,r = l+1,r+1
+            else:
+                c += 1
+    precision = c / (c + l+1e-10)
+    recall = c / (c + r+1e-10)
+    f_measure = 2*precision*recall / (precision+recall+1e-10)
+    return {
+        "common": c,
+        "left": l,
+        "right": r,
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "f_measure": round(f_measure, 3),
+    }
+
+
+
 class WorkingGRS(GRSDraft):
     def __init__(self, *args, **kwargs):
         """
@@ -45,6 +86,20 @@ class WorkingGRS(GRSDraft):
         self.eval |= other.eval
         return self
 
+def anomaly(obsL,  threshold):
+    """
+        L is a key within self
+        return for L an edge and its occurrence evaluation 
+        and number of total occurrences if beyond base_threshold
+    """
+    s = sum(obsL.values())
+    for x, v in obsL.items():
+        if v > threshold * s and x:
+            return (x, v, s)
+    return None, None, None
+
+def best_two(obsL, threshold):
+    ...
 
 def build_rules(sketch, observation, param, rule_name, rank_level=0):
     """
@@ -62,8 +117,10 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             return ";".join((f'{edge_name}.{a}="{b}"' for a, b in clauses.items()))
         return f'{crit}="{val}"'
     rules = WorkingGRS()
+    loose_rules = WorkingGRS()
     for parameter in observation:
-        x, v, s = observation.anomaly(parameter, param["base_threshold"])
+        #x, v, s = observation.anomaly(parameter, param["base_threshold"])
+        x, v, s = anomaly(observation[parameter], param["base_threshold"])
         if x:
             extra_pattern = [crit_to_request(crit, val) for (
                 crit, val) in zip(sketch.cluster_criterion, parameter)]
@@ -73,7 +130,26 @@ def build_rules(sketch, observation, param, rule_name, rank_level=0):
             R = Rule(P,Commands(c))
             rn = module_name(f"_{'_'.join(parameter)}_{rule_name}")
             rules[rn] = (R, (x, (v, s)))
-    return rules
+        else:
+            ...
+            """
+            search for a loose rule
+            
+            vals = observation[parameter].values()
+            s = sum(vals)
+            T = sorted(observation[parameter].items(), key= lambda x: x[1], reverse=True)
+            if T[0][0] != '' and T[1][0] != '' and (T[0][1]+T[1][1]) > 9*s/10:
+                extra_pattern = [crit_to_request(crit, val) for (
+                    crit, val) in zip(sketch.cluster_criterion, parameter)]
+                P = Request(sketch.P, *extra_pattern)
+                x0 = Fs_edge(f"{T[0][0]}|{T[1][0]}")  # {k:v for k,v in x}
+                c = Add_edge("X", x0, "Y")
+                R = Rule(P, Commands(c))
+                rn = module_name(f"_{'_'.join(parameter)}_{rule_name}")
+                loose_rules[rn] = (R, (x, (v, s)))
+                """
+
+    return rules, loose_rules
 
 
 def refine_rule(R, corpus, param, rank) -> list[Rule]:
@@ -135,8 +211,6 @@ def refine_rules(Rs, corpus, param, rank, debug=False):
             Rse[rule_name] = (R,s)
     return Rse
 
-
-
 def clear_but_working(g):
     """
     delete non working edges within g
@@ -149,7 +223,7 @@ def clear_but_working(g):
 Operations on computations
 """
 
-def get_best_solution(corpus_gold, corpus_start, grs):
+def get_best_solution(corpus_gold, corpus_start, grs) -> CorpusDraft:
     """
     grs is a GRSDraft
     return the best solution using the grs with respect to the gold corpus
@@ -159,11 +233,11 @@ def get_best_solution(corpus_gold, corpus_start, grs):
     def f_score(t):
         return t[0]/math.sqrt((t[0]+t[1])*(t[0]*t[2])+1e-20)
 
-    corpus_draft = CorpusDraft(corpus_start)
+    corpus = CorpusDraft(corpus_start)
     print(len(corpus_gold))
     i = 0
     for sid in corpus_gold:
-        if i % (len(corpus_gold)//10) == 0:
+        if i % (len(corpus_gold)//1) == 0:
             print(i)
         i += 1
         gs = grs.run(corpus_start[sid], 'main')
@@ -172,8 +246,8 @@ def get_best_solution(corpus_gold, corpus_start, grs):
             fs = f_score(g.edge_diff_up_to(corpus_gold[sid]))
             if fs > best_fscore:
                 best_fscore = fs
-                corpus_draft[sid] = g
-    return corpus_draft
+                corpus[sid] = g
+    return corpus
 
 """
 Learning sketches
@@ -188,15 +262,18 @@ def no_edge_between_X_and_Y(P):
 def simple_sketch(r):
     return Sketch(r, ["X.upos", "Y.upos"], edge_between_X_and_Y, no_edge_between_X_and_Y, "e.label")
 
-def apply_sketches(sketches, corpus, param, rank_level):
+def apply_sketches(sketches, corpus, param):
     """
     find rules from sketches
     """
     rules = WorkingGRS()
+    loose_rules = WorkingGRS()
     for sketch_name in sketches:
         sketch = sketches[sketch_name]
-        rules |= build_rules(sketch, sketch.cluster(corpus), param, sketch_name, rank_level=rank_level)
-    return rules
+        r1,l1 = build_rules(sketch, sketch.cluster(corpus), param, sketch_name)
+        rules |= r1
+        loose_rules |= l1
+    return rules, loose_rules
 
 def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     """
@@ -220,7 +297,7 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
                 Sketch(Request('X[];Y[head]', ns, o), ["X.upos", "Y.upos"] + list(extra), 
                 edge_between_X_and_Y, 
                 no_edge_between_X_and_Y, "e.label")
-    return apply_sketches(sadj, corpus, param, 0)    
+    return apply_sketches(sadj, corpus, param)    
 
 def append_head(g):
     for n in g:
@@ -241,6 +318,13 @@ def prepare_corpus(filename):
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     return corpus, empty
 
+def basic_edges(g):
+    def remove(e):
+        return {'1' : e['1']}
+    for n in g.sucs:
+        g.sucs[n] = tuple((m,remove(e)) for m,e in g.sucs[n])
+    return g
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
                                      description='Learn a grammar from sample files',
@@ -249,6 +333,7 @@ if __name__ == "__main__":
     parser.add_argument('train')
     parser.add_argument('-e', '--eval', default=None)
     parser.add_argument('--pickle', default=None)
+    parser.add_argument('--rules', default=None)
     args = parser.parse_args()
     if not args.eval:
         args.eval = args.train
@@ -267,6 +352,7 @@ if __name__ == "__main__":
         "min_occurrence_nb" : 10
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
+    corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     
     A = corpus_gold.count(Request('X<Y;e:X->Y'))
     A += corpus_gold.count(Request('Y<X;e:X->Y'))
@@ -274,7 +360,8 @@ if __name__ == "__main__":
     print(f"""number of edges within corpus: {corpus_gold.count(Request('e: X -> Y'))}""")
     print(f"number of adjacent relations: {A}")
 
-    R0 = adjacent_rules(corpus_gold, param)
+    R0,L0 = adjacent_rules(corpus_gold, param)
+    print(len(L0))
     R0e = refine_rules(R0, corpus_gold, param, 0)
     R0safe = R0e.safe_rules()
     for rn in R0safe:
@@ -289,12 +376,17 @@ if __name__ == "__main__":
     R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3))"
     if args.pickle:    
         pickle.dump( R00, open(args.pickle, "wb"))
+    if args.rules:
+        f = open(args.rules, "w")
+        f.write( str(R00) )
+        f.close()
+
     G00 = GRS(R00)
-    
     web = grew_web.Grew_web()
     print(web.url())
     web.load_corpus(corpus_empty)
 
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, G00)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
+    print(corpus_diff(currently_computed_corpus, corpus_gold))
 

@@ -26,7 +26,7 @@ class Fs_edge(dict):
         elif isinstance(data, dict):
             clauses = dict()
             for k in data:
-                Fs_edge.extract(data[k],clauses)
+                Fs_edge.extract(data[k],clauses, k)
             super().__init__(clauses)
         else:
             raise ValueError(f"data is not a feature structure {data}")
@@ -44,7 +44,7 @@ class Fs_edge(dict):
         return hash(tuple((sorted(self.items()))))
     
     @staticmethod
-    def extract(u, clauses):
+    def extract(u, clauses, key='1'):
             if '@' in u:
                 u, t = u.split('@')
                 clauses['deep'] = t
@@ -53,7 +53,7 @@ class Fs_edge(dict):
                 clauses['1'] = u
                 clauses['2'] = t
             else:
-                clauses['1'] = u
+                clauses[key] = u
     @staticmethod
     def decompose_edge(s):
         clauses = dict()
