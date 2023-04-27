@@ -334,6 +334,7 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--eval', default=None)
     parser.add_argument('--pickle', default=None)
     parser.add_argument('--rules', default=None)
+    parser.add_argument('--details',default=False)
     args = parser.parse_args()
     if not args.eval:
         args.eval = args.train
@@ -352,7 +353,8 @@ if __name__ == "__main__":
         "min_occurrence_nb" : 10
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
-    corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
+    if args.details:
+        corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     
     A = corpus_gold.count(Request('X<Y;e:X->Y'))
     A += corpus_gold.count(Request('Y<X;e:X->Y'))
