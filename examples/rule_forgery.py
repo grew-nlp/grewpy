@@ -245,7 +245,7 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
 
     nodes = ['f:X -> Z$', 'f:Y -> Z$', 'f:Z$->X', 'f:Z$->Y']
     ordres = ['X<Y', 'X>Y', 'Z$<Y', 'Z$>Y', 'X<Z$', 'X>Z$', 'Z$<<Y', 'Z$>>Y', 'X<<Z$', 'X>>Z$']
-    on_label = [("Z$.upos",), ("f.label",), tuple()]
+    on_label = [("f.label",), tuple()]
     for loc in local:
         for ns in nodes:
             for o in ordres:
