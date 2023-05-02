@@ -70,7 +70,6 @@ def build_rules(sketch, observation, param, rule_name, verbose=False):
     for parameter in observation:
         if verbose:
             print(observation[parameter])
-        #x, v, s = observation.anomaly(parameter, param["base_threshold"])
         x, v, s = anomaly(observation[parameter], param["base_threshold"])
         if x:
             extra_pattern = [crit_to_request(crit, val) for (
@@ -129,7 +128,7 @@ def refine_rule(R, corpus, param) -> list[Rule]:
     return res, clf
 
 
-def refine_rules(Rs, corpus, param, debug=False):
+def refine_rules(Rs, corpus, param, verbose=False):
     """
     as above, but applies on a list of rules
     and filter only "correct" rules, see `param`
@@ -144,11 +143,11 @@ def refine_rules(Rs, corpus, param, debug=False):
         elif v/s < param["valid_threshold"]:
             new_r, clf = refine_rule(R.request, corpus, param)
             if len(new_r) >= 1:
-                if debug:
+                if verbose:
                     print("--------------------------replace")
                     print(R)
                 for r in new_r:
-                    if debug:
+                    if verbose:
                         print("by : ")
                         print(r)
                     X = ",".join(f'{k}="{v}"' for k,
@@ -171,7 +170,7 @@ def edge_between_X_and_Y(P):
 
 
 def no_edge_between_X_and_Y(P):
-    return Request(P).without('e:X-[^LEFT_SPAN|RIGHT_SPAN|ANCESTOR]->Y')
+    return Request(P).without('e:X-[^ANCESTOR]->Y')
 
 
 def simple_sketch(r):
@@ -244,9 +243,9 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
         sadj[module_name("int_4", loc)] = sketch_with_parameter(
             Request(loc, "X[];Y[head];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
 
-    nodes = ['f:X -> $Z', 'f:Y -> $Z', 'f:$Z->X', 'f:$Z->Y']
-    ordres = ['X<Y', 'X>Y', '$Z<Y', '$Z>Y', 'X<$Z', 'X>$Z', '$Z<<Y', '$Z>>Y', 'X<<$Z', 'X>>$Z']
-    on_label = [("$Z.upos",), ("f.label",), tuple()]
+    nodes = ['f:X -> Z$', 'f:Y -> Z$', 'f:Z$->X', 'f:Z$->Y']
+    ordres = ['X<Y', 'X>Y', 'Z$<Y', 'Z$>Y', 'X<Z$', 'X>Z$', 'Z$<<Y', 'Z$>>Y', 'X<<Z$', 'X>>Z$']
+    on_label = [("Z$.upos",), ("f.label",), tuple()]
     for loc in local:
         for ns in nodes:
             for o in ordres:
