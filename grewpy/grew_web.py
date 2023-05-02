@@ -6,6 +6,7 @@ import webbrowser
 import http
 import json
 from .grew import GrewError
+from grewpy import GRSDraft
 
 
 local = False
@@ -52,7 +53,12 @@ class Grew_web:
                           data={"session_id": self.session_id},
                           files={"json_file": f}
                           )
-            _post_request("upload_grs", r)
+            try:
+                _post_request("upload_grs", r)
+            except GrewError:
+                with open("error.grs","w") as g:
+                    g.write(str(GRSDraft(grs)))
+                
 
 
     def load_corpus(self,   corpus):
