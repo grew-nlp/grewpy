@@ -2,7 +2,7 @@ import classifier
 import numpy as np
 import re
 
-# Use local grew lib
+# UU$se local grew lib
 import os
 import sys
 sys.path.insert(0, os.path.abspath(
@@ -199,6 +199,8 @@ def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
     sadj = dict()
     sadj["adjacent_lr"] = simple_sketch(Request("X[];Y[head];X<Y"))
     sadj["adjacent_rl"] = simple_sketch(Request("X[];Y[head];Y<X"))
+    sadj["adj2_lr"] = sketch_with_parameter(Request("X[];Y[head];Z[];X<Z;Z<Y"),["Z.upos"])
+    sadj["adj2_rl"] = sketch_with_parameter(Request("X[];Y[head];Z[];Y<Z;Z<X"),["Z.upos"])
     sadj["no_intermediate_1"] = simple_sketch(
         Request("X[];Y[head];X<<Y").without("Z[];X<<Z;Z<<Y;X.upos=Z.upos"))
     sadj["no_intermediate_2"] = simple_sketch(
@@ -227,7 +229,7 @@ def sketch_with_parameter(req, extra_labels=[]):
 
 
 def local_rules(corpus: Corpus, param) -> WorkingGRS:
-    local = ["h:U->V;U<<X;U<<Y;X<<V;Y<<V", "h:V->U;U<<X;U<<Y;X<<V;Y<<V"]
+    local = ["h:U$->V$;U$<<X;U$<<Y;X<<V$;Y<<V$", "h:V$->U$;U$<<X;U$<<Y;X<<V$;Y<<V$"]
     sadj = dict()
     for loc in local:
         sadj[module_name("loc_lr", loc)] = sketch_with_parameter(
@@ -251,7 +253,7 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
             for o in ordres:
                 for extra in on_label:
                     sadj[module_name((loc, ns, o, extra, next(cpt)))] =\
-                Sketch(Request(loc,'X[];Y[head]', ns, o), ["X.upos", "Y.upos"] + list(extra), 
+                Sketch(Request(loc,'X[];Y[head];e<>h', ns, o), ["X.upos", "Y.upos"] + list(extra), 
                 edge_between_X_and_Y, 
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param)
