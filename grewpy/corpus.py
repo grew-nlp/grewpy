@@ -4,6 +4,8 @@ Graphs are represented either by a dict (called dict-graph),
 or by an str (str-graph).
 """
 import os.path
+import glob
+
 import sys
 import tempfile
 import json
@@ -61,7 +63,6 @@ class CorpusDraft(AbstractCorpus,dict):
     def __init__(self,data=None):
         """Load a corpus from a file of a string
         :param data: a file, a list of files or a CoNLL string representation of a corpus
-        :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
@@ -102,7 +103,6 @@ class Corpus(AbstractCorpus):
     def __init__(self, data):
         """An abstract corpus
         :param data: a file, a list of files or a CoNLL string representation of a corpus
-        :param local: state whether we load a local copy of each graph of the corpus
         :return: an integer index for latter reference to the corpus
         :raise an error if the files was not correctly loaded
         """
@@ -117,6 +117,11 @@ class Corpus(AbstractCorpus):
         elif isinstance(data, dict):
             req = {"command": "corpus_from_dict", "graphs": {
                 sent_id: graph.json_data() for (sent_id, graph) in data.items()}}
+            reply = network.send_and_receive(req)
+        elif os.path.isdir(data):
+            # load of connlu files of the directory
+            file_list = glob.glob(f"{data}/*.conllu")
+            req = {"command": "corpus_load", "files": file_list}
             reply = network.send_and_receive(req)
         elif os.path.isfile(data):
             req = {"command": "corpus_load", "files": [data]}
@@ -145,6 +150,13 @@ class Corpus(AbstractCorpus):
         return the id of the corpus
         """
         return self._id
+
+    def clean(self):
+        """
+        clean the corpus (remove from the backend memory)
+        """
+        req = {"command": "corpus_clean", "corpus_index": self._id}
+        return network.send_and_receive(req)
 
     def get(self, sent_id):
         """
