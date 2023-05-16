@@ -16,17 +16,13 @@ class Sketch:
         self.target = target
 
     def cluster(self, corpus):
-        """
-        search for a link X -> Y with respect to the sketch in the corpus
-        we build a cluster depending on cluster criterion (e.g. X.upos, Y.upos)
-        """
-        P1 = self.avec(self.P)
-        obs = corpus.count(P1, self.cluster_criterion, [self.target], True)
-        if not obs:
-            return obs
-        W1 = self.without(Request(self.P))
-        clus = corpus.count(W1, self.cluster_criterion, [], True)
-        for L in obs:
-            if L in clus:
-                obs[L][''] = clus[L][tuple()]
-        return obs
+        def _none_(n):
+            return '' if '__none__' in n else n[0]
+        obs2 = corpus.count(self.P, self.cluster_criterion, ["X->Y"], True)
+        obs3 = dict()
+        for k1, o1 in obs2.obs.items():
+            if len(o1) == 1 and ('__none__',) in o1:
+                ...
+            else:
+                obs3[k1] = {_none_(k2) : v for k2,v in o1.items()}
+        return obs3

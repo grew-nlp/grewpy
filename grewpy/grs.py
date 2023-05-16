@@ -300,6 +300,10 @@ class GRSDraft(Package):
     def onf(self, strat_name="main"):
         self[strat_name] = f'Onf(Alt({",".join(self.rules())}))'
         return self
+    
+    def save(self, filename):
+        with open(filename, "w") as f:
+            f.write(str(self))
       
 class GRS:
     """
@@ -347,10 +351,9 @@ class GRS:
     def run(self, data, strat="main"):
         """
         run a Grs on a graph
-        :param grs_data: a graph rewriting system or a Grew string representation of a grs
-        :param G: the graph, either a str (in grew format) or a dict
+        :param data: a graph or an AbstractCorpus
         :param strat: the strategy (by default "main")
-        :return: the list of rewritten graphs
+        :return: a dictionary mapping sid to the list of rewritten graphs
         """
         if isinstance(data, Graph):
             req = {
@@ -402,3 +405,5 @@ class GRS:
         elif isinstance(data, CorpusDraft):
             acorpus = Corpus(data)
             self.apply(acorpus, strat, abstract)
+
+    

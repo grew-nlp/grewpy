@@ -75,29 +75,13 @@ def build_rules(sketch, observation, param, rule_name, verbose=False):
             extra_pattern = [crit_to_request(crit, val) for (
                 crit, val) in zip(sketch.cluster_criterion, parameter)]
             P = Request(sketch.P, *extra_pattern)
-            x0 = Fs_edge(x[0])  # {k:v for k,v in x}
+            x0 = Fs_edge(x)  # {k:v for k,v in x}
             c = Add_edge("X", x0, "Y")
             R = Rule(P, Commands(c))
             rn = module_name(f"_{'_'.join(parameter)}_{rule_name}")
             rules[rn] = (R, (x, (v, s)))
         else:
             ...
-            """
-            search for a loose rule
-            
-            vals = observation[parameter].values()
-            s = sum(vals)
-            T = sorted(observation[parameter].items(), key= lambda x: x[1], reverse=True)
-            if T[0][0] != '' and T[1][0] != '' and (T[0][1]+T[1][1]) > 9*s/10:
-                extra_pattern = [crit_to_request(crit, val) for (
-                    crit, val) in zip(sketch.cluster_criterion, parameter)]
-                P = Request(sketch.P, *extra_pattern)
-                x0 = Fs_edge(f"{T[0][0]}|{T[1][0]}")  # {k:v for k,v in x}
-                c = Add_edge("X", x0, "Y")
-                R = Rule(P, Commands(c))
-                rn = module_name(f"_{'_'.join(parameter)}_{rule_name}")
-                loose_rules[rn] = (R, (x, (v, s)))
-                """
     return rules, loose_rules
 
 def refine_rule(R, corpus, param) -> list[Rule]:
@@ -246,14 +230,14 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
             Request(loc, "X[];Y[head];Y<<X").without("Z[];Y<<Z;Z<<X;X.upos=Z.upos"))
 
     nodes = ['f:X -> Z$', 'f:Y -> Z$', 'f:Z$->X', 'f:Z$->Y']
-    ordres = ['X<Y', 'X>Y', 'Z$<Y', 'Z$>Y', 'X<Z$', 'X>Z$', 'Z$<<Y', 'Z$>>Y', 'X<<Z$', 'X>>Z$']
+    ordres = ['X<Y', 'X>Y', 'X<<Y','Y<<X']
     on_label = [("f.label",), tuple()]
     for loc in local:
         for ns in nodes:
             for o in ordres:
                 for extra in on_label:
                     sadj[module_name((loc, ns, o, extra, next(cpt)))] =\
-                Sketch(Request(loc,'X[];Y[head];e<>h', ns, o), ["X.upos", "Y.upos"] + list(extra), 
+                Sketch(Request(loc,'X[];Y[head];e<>h', ns, o), ["X.upos", "Y.upos", "Z$.upos"] + list(extra), 
                 edge_between_X_and_Y, 
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param)

@@ -14,49 +14,14 @@ from rule_forgery import WorkingGRS, adjacent_rules, local_rules, refine_rules
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
 
-from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Package, Delete_feature
+from grewpy import Request, Rule, Commands, Command, Add_edge, GRSDraft, CorpusDraft, Package, Delete_feature
 from grewpy import Corpus, GRS, set_config
 from grewpy import grew_web
 from grewpy.graph import Fs_edge
 
-def edge_is(e,f):
-    """
-    tells whether e is an f
-    """
-    for k in e:
-        if k not in f or e[k] not in f[k]:
-            return False
-    return True
-
-"""
-def corpus_diff(c1,c2):
-    c,l,r = 0,0,0
-    for sid in c1:
-        men = {m: (e, n) for n, e, m in c1[sid].triples()}
-        menp = {m : (e,n) for n,e, m in c2[sid].triples()}
-        S1 = set(men.keys())
-        S2 = set(menp.keys())
-        l += len(S1 - S2)
-        r += len(S2 - S1)
-        for m in S1 & S2:
-            e,n = men[m]
-            ep,np = menp[m]
-            if n != np or not edge_is(ep,e):
-                l,r = l+1,r+1
-            else:
-                c += 1
-    precision = c / (c + l+1e-10)
-    recall = c / (c + r+1e-10)
-    f_measure = 2*precision*recall / (precision+recall+1e-10)
-    return {
-        "common": c,
-        "left": l,
-        "right": r,
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f_measure": round(f_measure, 3),
-    }
-"""
+def add_rule_name(wgrs):
+    for rn in wgrs:
+        wgrs[rn].commands.append(Command(f'Y.rule="{rn}"'))
 
 def clear_but_working(g):
     """
@@ -83,7 +48,7 @@ def basic_edges(g):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
-def get_best_solution(corpus_gold, corpus_start, grs : GRSDraft, strategy="main", verbose=0) -> CorpusDraft:
+def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", verbose=0) -> CorpusDraft:
     """
     grs is a GRSDraft
     return the best solution using the grs with respect to the gold corpus
@@ -93,6 +58,7 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRSDraft, strategy="main"
     def f_score(t):
         return t[0]/math.sqrt((t[0]+t[1])*(t[0]*t[2])+1e-20)
 
+    solutions = grs.run(corpus_start)
     corpus = CorpusDraft(corpus_start)
     print(len(corpus_gold))
     i = 0
@@ -100,9 +66,9 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRSDraft, strategy="main"
         if i % (len(corpus_gold)//1) == 0:
             print(i)
         i += 1
-        gs = grs.run(corpus_start[sid], 'main')
+        #gs = grs.run(corpus_start[sid], 'main')
         best_fscore = 0
-        for g in gs:
+        for g in solutions[sid]:
             fs = f_score(g.edge_diff_up_to(corpus_gold[sid]))
             if fs > best_fscore:
                 best_fscore = fs
@@ -171,6 +137,7 @@ if __name__ == "__main__":
     print(len(L0))
     R0e = refine_rules(R0, corpus_gold, param)
     R0e = R0e.safe_rules()
+    add_rule_name(R0e)
     R0e = append_delete_head(R0e)
     print(f"number of rules len(R0e) = {len(R0e)}")
     #turn R0e to a set of packages to speed up the process
@@ -205,4 +172,48 @@ if __name__ == "__main__":
         R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3),Onf(P4))"
         currently_computed_corpus = get_best_solution(corpus_gold, currently_computed_corpus, G00, strategy="Onf(P4)")
         print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
+        if args.rules:
+            f = open(args.rules, "w")
+            f.write(str(R00))
+            f.close()
         print('done')
+
+"""
+
+def edge_is(e,f):
+    '''
+    tells whether e is an f
+    '''
+    for k in e:
+        if k not in f or e[k] not in f[k]:
+            return False
+    return True
+
+def corpus_diff(c1,c2):
+    c,l,r = 0,0,0
+    for sid in c1:
+        men = {m: (e, n) for n, e, m in c1[sid].triples()}
+        menp = {m : (e,n) for n,e, m in c2[sid].triples()}
+        S1 = set(men.keys())
+        S2 = set(menp.keys())
+        l += len(S1 - S2)
+        r += len(S2 - S1)
+        for m in S1 & S2:
+            e,n = men[m]
+            ep,np = menp[m]
+            if n != np or not edge_is(ep,e):
+                l,r = l+1,r+1
+            else:
+                c += 1
+    precision = c / (c + l+1e-10)
+    recall = c / (c + r+1e-10)
+    f_measure = 2*precision*recall / (precision+recall+1e-10)
+    return {
+        "common": c,
+        "left": l,
+        "right": r,
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "f_measure": round(f_measure, 3),
+    }
+"""
