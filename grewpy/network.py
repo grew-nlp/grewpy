@@ -1,6 +1,6 @@
 ''' Utility tools to connect to ocaml GREW'''
 
-import subprocess
+from subprocess import Popen, PIPE
 import time
 import socket
 import os.path
@@ -33,22 +33,22 @@ def init():
     grewpy = "grewpy_backend"
     if not pid_exist(caml_pid):
         python_pid = os.getpid()
-        while (port<8898):
-            caml = subprocess.Popen(
-                [grewpy, "--caller", str(python_pid), "--port", str(port)],
-                preexec_fn=preexec_function
-            )
-            caml_pid = caml.pid
-            #wait for grew's lib answer
-            time.sleep(0.1)
-            if caml.poll() == None:
-                print ("connected to port: " + str(port), file=sys.stderr)
-                remote_ip = socket.gethostbyname(host)
-                return (caml)
-            else:
-                port += 1
-        print ("Failed to connect 10 times!", file=sys.stderr)
-        exit (1)
+        caml = Popen(
+            [grewpy, "--caller", str(python_pid)],
+            preexec_fn=preexec_function,
+            stdout=PIPE
+        )
+        port = int(caml.stdout.readline().strip())
+        caml_pid = caml.pid
+        #wait for grew's lib answer
+        time.sleep(0.1)
+        if caml.poll() == None:
+            print ("connected to port: " + str(port), file=sys.stderr)
+            remote_ip = socket.gethostbyname(host)
+            return (caml)
+        else:
+            print ("Failed to connect", file=sys.stderr)
+            exit (1)
 
 def connect():
     try:
