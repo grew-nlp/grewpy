@@ -22,21 +22,47 @@ class Fs_edge(dict):
                 #suppose it is a dictionary
                 super().__init__(Fs_edge.decompose_edge(data))
             else:
-                super().__init__({"1": data})
+                super().__init__(Fs_edge.decompose_edge(data))
         elif isinstance(data, dict):
-            super().__init__(data)
+            clauses = dict()
+            for k in data:
+                Fs_edge.extract(data[k],clauses, k)
+            super().__init__(clauses)
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
+    def __eq__(self, other):
+        for k,v in self.items():
+            if k not in other or v != other[k]:
+                return False
+        return len(self) == len(other)
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
     def __hash__(self):
-        return (hash (str(self)))
+        return hash(tuple((sorted(self.items()))))
     
+    @staticmethod
+    def extract(u, clauses, key='1'):
+            if '@' in u:
+                u, t = u.split('@')
+                clauses['deep'] = t
+            if ':' in u:
+                u,t = u.split(':')
+                clauses['1'] = u
+                clauses['2'] = t
+            else:
+                clauses[key] = u
     @staticmethod
     def decompose_edge(s):
         clauses = dict()
         for it in s.split(","):
-            a, b = it.split("=")
-            clauses[a] = b
+            if '=' in s:
+                a,b = it.split("=")
+                clauses[a] = b
+            else:
+                Fs_edge.extract(s,clauses)
         return clauses
 
 class Graph():
@@ -68,10 +94,11 @@ class Graph():
             self.meta = kwargs.get("meta", dict())
             self._sucs = kwargs.get("sucs", dict())
         elif isinstance(data, dict):
-            self.features = data.get("features", dict())
-            self.order = data.get("order", [])
-            self.meta = data.get("meta", dict())
-            self._sucs = data.get("sucs", dict())
+            (features, sucs, meta, order) = Graph._from_json(data)
+            self.features = features
+            self.order = order
+            self.meta = meta            
+            self._sucs = sucs
         elif isinstance(data,str):
             #either filename, json or conll
             if os.path.isfile(data):

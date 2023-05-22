@@ -98,6 +98,8 @@ class CorpusDraft(AbstractCorpus,dict):
         """
         return CorpusDraft({sid : fun(self[sid]) for sid in self})
 
+    def to_conll(self):
+        return Corpus(self).to_conll()
 
 class Corpus(AbstractCorpus):
     def __init__(self, data):
