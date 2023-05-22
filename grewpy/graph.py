@@ -94,15 +94,11 @@ class Graph():
             self.meta = kwargs.get("meta", dict())
             self._sucs = kwargs.get("sucs", dict())
         elif isinstance(data, dict):
-            self.features = data.get("features", dict())
-            self.order = data.get("order", [])
-            self.meta = data.get("meta", dict())
-            edges = data.get("edges", dict())
-            self._sucs = dict()
-            for edge in edges:
-                utils.map_append(self._sucs, edge["src"],
-                                 (edge["tar"], Fs_edge(edge["label"])))
-            #self._sucs = data.get("edges", dict())
+            (features, sucs, meta, order) = Graph._from_json(data)
+            self.features = features
+            self.order = order
+            self.meta = meta            
+            self._sucs = sucs
         elif isinstance(data,str):
             #either filename, json or conll
             if os.path.isfile(data):
