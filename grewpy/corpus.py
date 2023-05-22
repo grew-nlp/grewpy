@@ -120,7 +120,7 @@ class Corpus(AbstractCorpus):
             reply = network.send_and_receive(req)
         elif os.path.isdir(data):
             # load of connlu files of the directory
-            file_list = glob.glob(f"{data}/*.conllu")
+            file_list = glob.glob(f"{data}/*.conllu") + glob.glob(f"{data}/*.conll") + glob.glob(f"{data}/*.cupt")
             req = {"command": "corpus_load", "files": file_list}
             reply = network.send_and_receive(req)
         elif os.path.isfile(data):
