@@ -50,52 +50,79 @@ class Request():
          - (pattern) string or a
          - Request (for copies)
         """
-        elts = tuple()
-        for e in L:
-            if isinstance(e,str):
-                elts += (RequestItem("pattern", e),)
-            elif isinstance(e,RequestItem):
-                elts += (e,)
-            elif isinstance(e,Request):
-                elts += e.items
-            elif isinstance(e,tuple): #supposed to be a list of ClauseList
-                elts += e
-            else:
-                try:
-                    #suppose it is a generator
-                    for x in e:
-                        elts += (x,)
-                except:
-                    raise ValueError(f"{e} cannot be used to build a Request")
-        self.items = elts
+        if len(L) == 1 and isinstance(L[0],int):
+            self.index = L[0]
+        else:
+            elts = tuple()
+            for e in L:
+                if isinstance(e,str):
+                    elts += (RequestItem("pattern", e),)
+                elif isinstance(e,RequestItem):
+                    elts += (e,)
+                elif isinstance(e,Request):
+                    elts += e.items
+                elif isinstance(e,tuple): #supposed to be a list of ClauseList
+                    elts += e
+                else:
+                    try:
+                        #suppose it is a generator
+                        for x in e:
+                            elts += (x,)
+                    except:
+                        raise ValueError(f"{e} cannot be used to build a Request")
+            self.items = elts
 
     def without(self, *L):
-        self.items += tuple(RequestItem("without", e) for e in L)
-        return self
+        if hasattr(self, 'items'):
+            self.items += tuple(RequestItem("without", e) for e in L)
+            return self
+        else:
+            raise ValueError("Abstract request")
 
     def with_(self, *L):
-        self.items += tuple(RequestItem("with", e) for e in L)
-        return self
+        if hasattr(self, 'items'):
+            self.items += tuple(RequestItem("with", e) for e in L)
+            return self
+        else:
+            raise ValueError("Abstract request")
 
     @classmethod
     def from_json(cls,json_data):
         elts = [RequestItem.from_json(c) for c in json_data]
         return cls(*elts)
 
+    @classmethod
+    def parse(cls, string_request):
+        req = {"command": "request_parse", "request": string_request}
+        reply = network.send_and_receive(req)
+        return cls(reply["index"])
+
     def json_data(self):
-        return [x.json_data() for x in self.items]
+        if hasattr(self, 'items'):
+            return [x.json_data() for x in self.items]
+        else:
+            return { "index": self.index }
 
     def __str__(self):
-        return "\n".join([str(e) for e in self.items])
+        if hasattr(self, 'items'):
+            return "\n".join([str(e) for e in self.items])
+        else:
+            raise ValueError("Abstract request")
 
     def __iter__(self):
-        return iter(self.items)
+        if hasattr(self, 'items'):
+            return iter(self.items)
+        else:
+            raise ValueError("Abstrat request are not iterable")
 
     def pattern(self):
         """
         return the pattern of self as a tuple
         """
-        return Request(p for p in self.items if p.sort == "pattern")
+        if hasattr(self, 'items'):
+            return Request(p for p in self.items if p.sort == "pattern")
+        else:
+            raise ValueError("Abstract request")
 
     def append(self, *L):
         """
@@ -103,12 +130,15 @@ class Request():
         L is given either as a pair (s,t) with "s \in {'pattern','without','meta'} and t : str 
         or L[0] is a ClauseList 
         """
-        if len(L) == 2:
-            self.items = self.items + (RequestItem(L[0], L[1]),)
-        elif len(L) == 1:
-            self.items = self.items + L
+        if hasattr(self, 'items'):
+            if len(L) == 2:
+                self.items = self.items + (RequestItem(L[0], L[1]),)
+            elif len(L) == 1:
+                self.items = self.items + L
+            else:
+                raise ValueError(f"cannot build a clause list with {L}")
         else:
-            raise ValueError(f"cannot build a clause list with {L}")
+            raise ValueError("Abstract request")
 
 
 class Command:
@@ -401,5 +431,3 @@ class GRS:
         elif isinstance(data, CorpusDraft):
             acorpus = Corpus(data)
             self.apply(acorpus, strat, abstract)
-
-    
