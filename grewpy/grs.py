@@ -72,10 +72,6 @@ class Request():
     def without(self, *L):
         self.items += tuple(RequestItem("without", e) for e in L)
         return self
-    def with_(self, *L):
-        self.items += tuple(RequestItem("with", e) for e in L)
-        return self
-
 
     def with_(self, *L):
         self.items += tuple(RequestItem("with", e) for e in L)
