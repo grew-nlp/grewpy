@@ -17,7 +17,11 @@ class Observation(object):
     
     @staticmethod
     def from_str(s):
-        return eval(s)
+        x = eval(s)
+        if isinstance(x, bool):
+            return Obool(x)
+        else:
+            return OLabel(x)
     
 
 class OLabel(Observation):
@@ -56,7 +60,7 @@ if __name__ =="__main__":
     print(repr(u))
     print(u.say_hello())
 
-    z = Observation.from_str('Obool(True)')
+    z = Observation.from_str('True')
     print(z.say_hello())
     print(str(eval(repr(z))))
 
