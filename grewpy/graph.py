@@ -251,8 +251,8 @@ class Graph():
         """
         edge difference between two graphs
         """
-        E1 = {(m,repr(e),n) for (m,e,n) in self.triples() if edge_criterion(e)}  # set of edges as triples
-        E2 = {(m, repr(e), n) for (m, e, n) in other.triples() if edge_criterion(e)}  # set of edges as triples
+        E1 = {(m, repr(e), n) for (m,e,n) in self.triples()  if edge_criterion(e)}  # set of edges as triples
+        E2 = {(m, repr(e), n) for (m,e,n) in other.triples() if edge_criterion(e)}  # set of edges as triples
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
 
     def lower(self, n, m):

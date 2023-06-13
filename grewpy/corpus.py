@@ -21,12 +21,13 @@ from . import network
 from .matchings import Matchings
 
 class AbstractCorpus():
-    def diff(self, other, edge_criterion=lambda e: True):
+    def edge_diff(self, other, edge_criterion=lambda e: True):
         """
-        given two corpora, outputs the number of common edges, only left ones and only right ones
+        given two corpora, outputs the number of common edges, only left ones and only right ones.
+        It also outputs precision, recall and f-measure.
         """
         (common, left, right) = np.sum(
-            [self[sid].diff(other[sid],edge_criterion) for sid in self], axis=0)
+            [self[sid].edge_diff(other[sid],edge_criterion) for sid in self], axis=0)
         precision = common / (common + left+1e-10)
         recall = common / (common + right+1e-10)
         f_measure = 2*precision*recall / (precision+recall+1e-10)
