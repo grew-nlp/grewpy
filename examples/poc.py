@@ -15,6 +15,12 @@ class Observation(object):
     def say_hello(self):
         return f"hello, I am {str(self)} with type {type(self)}"
     
+    def __str__(self):
+        return str(self.obs)
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.obs})"
+    
     @staticmethod
     def from_str(s):
         x = eval(s)
@@ -27,23 +33,11 @@ class Observation(object):
 class OLabel(Observation):
     def __init__(self, obs):
         self.obs = obs
-    
-    def __str__(self):
-        return str(self.obs)
-    
-    def __repr__(self):
-        return f"OLabel({repr(self.obs)})"
-    
+        
 class Obool(Observation):
     def __init__(self, obs):
         self.obs = obs
     
-    def __str__(self):
-        return str(self.obs)
-    
-    def __repr__(self):
-        return f"Obool({repr(self.obs)})"
-
 if __name__ =="__main__":
     l = Label({"1" : "comp", "2" : "obl", "deep": "at"})
 
