@@ -19,25 +19,33 @@ class Observation(object):
         return str(self.obs)
     
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.obs})"
+        return f"{self.__class__.__name__}({repr(self.obs)})"
     
     @staticmethod
     def from_str(s):
         x = eval(s)
         if isinstance(x, bool):
             return Obool(x)
-        else:
+        if isinstance(x, Label):
             return OLabel(x)
+        else:
+            raise ValueError ("Unknown observation")
     
 
 class OLabel(Observation):
     def __init__(self, obs):
-        self.obs = obs
+        if isinstance(obs, Label):
+            self.obs = obs
+        else:
+            raise ValueError (f"OLabel type error: type 'Label' expected but get an expression of type '{type (obs)}'")
         
 class Obool(Observation):
     def __init__(self, obs):
-        self.obs = obs
-    
+        if isinstance(obs, bool):
+            self.obs = obs
+        else:
+            raise ValueError (f"Obool type error: type 'bool' expected but get an expression of type '{type (obs)}'")
+
 if __name__ =="__main__":
     l = Label({"1" : "comp", "2" : "obl", "deep": "at"})
 
