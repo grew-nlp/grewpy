@@ -30,7 +30,7 @@ class RequestItem():
     def from_json(cls, json_data : JSON) :
         k = list(json_data)[0]
         v = json_data[k]
-        return cls(k,*v)
+        return cls(k,v)
 
     def __str__(self):
         its = ";".join([str(x) for x in self.items])
@@ -88,8 +88,13 @@ class Request():
 
     @classmethod
     def from_json(cls,json_data):
-        elts = [RequestItem.from_json(c) for c in json_data]
-        return cls(*elts)
+        if isinstance(json_data,str):
+            return cls.parse(json_data)
+        if len(json_data) > 0 and isinstance(json_data[0], str):
+            return cls.parse("\n".join(json_data))
+        else:
+            elts = [RequestItem.from_json(c) for c in json_data]
+            return cls(*elts)
 
     @classmethod
     def parse(cls, string_request):
@@ -113,7 +118,7 @@ class Request():
         if hasattr(self, 'items'):
             return iter(self.items)
         else:
-            raise ValueError("Abstrat request are not iterable")
+            raise ValueError("Abstract request are not iterable")
 
     def pattern(self):
         """
