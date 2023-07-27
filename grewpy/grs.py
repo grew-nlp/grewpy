@@ -50,8 +50,9 @@ class Request():
          - (pattern) string or a
          - Request (for copies)
         """
-        if len(L) == 1 and isinstance(L[0],int):
+        if len(L) == 2 and isinstance(L[0],int):
             self.index = L[0]
+            self.string = L[1]
         else:
             elts = tuple()
             for e in L:
@@ -100,7 +101,7 @@ class Request():
     def parse(cls, string_request):
         req = {"command": "request_parse", "request": string_request}
         reply = network.send_and_receive(req)
-        return cls(reply["index"])
+        return cls(reply["index"], string_request)
 
     def json_data(self):
         if hasattr(self, 'items'):
@@ -112,7 +113,7 @@ class Request():
         if hasattr(self, 'items'):
             return "\n".join([str(e) for e in self.items])
         else:
-            raise ValueError("Abstract request")
+            return self.string
 
     def __iter__(self):
         if hasattr(self, 'items'):
@@ -144,7 +145,6 @@ class Request():
                 raise ValueError(f"cannot build a clause list with {L}")
         else:
             raise ValueError("Abstract request")
-
 
 class Command:
     def __init__(self,s):
