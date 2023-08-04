@@ -77,6 +77,10 @@ class Request():
         self.items += tuple(RequestItem("with", e) for e in L)
         return self
 
+    def global_(self, *L):
+        self.items += tuple(RequestItem("global", e) for e in L)
+        return self
+
     @classmethod
     def from_json(cls,json_data):
         elts = [RequestItem.from_json(c) for c in json_data]
