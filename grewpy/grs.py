@@ -87,6 +87,10 @@ class Request():
         else:
             raise ValueError("Abstract request")
 
+    def global_(self, *L):
+        self.items += tuple(RequestItem("global", e) for e in L)
+        return self
+
     @classmethod
     def from_json(cls,json_data):
         if isinstance(json_data,str):
