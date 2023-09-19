@@ -7,6 +7,7 @@ setuptools.setup(
     name='grewpy',
     version='0.4.2',
     packages=['grewpy','examples'],
+    install_requires=[ 'numpy' ],
     license='LICENSE/Licence_CeCILL_V2-en.txt',
     description="A binding to the Grew software",
     long_description=long_description,
