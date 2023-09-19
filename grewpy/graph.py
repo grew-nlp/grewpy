@@ -196,9 +196,27 @@ class Graph():
         reply = send_and_receive(req)
         return reply
 
+    def to_svg(self, deco=None):
+        """
+        return a SVG code for the given graph
+        """
+        data = self.json_data()
+        req = {"command": "graph_to_svg", "graph": data, "deco": deco}
+        reply = send_and_receive(req)
+        return reply
+
+    def to_sentence(self, deco=None):
+        """
+        return a SVG code for the given graph
+        """
+        data = self.json_data()
+        req = {"command": "graph_to_sentence", "graph": data, "deco": deco}
+        reply = send_and_receive(req)
+        return reply
+
     def triples(self):
         """
-        return the list of edges presented as triples (n,e,s) with n-[e]-> s         
+        return the list of edges presented as triples (n,e,s) with n-[e]-> s
         """
         return list((n, e, s) for n in self._sucs for s,e in self._sucs[n])
 
