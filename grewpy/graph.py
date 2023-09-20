@@ -196,12 +196,12 @@ class Graph():
         reply = send_and_receive(req)
         return reply
 
-    def to_svg(self, deco=None):
+    def to_svg(self, deco=None, draw_root=False):
         """
         return a SVG code for the given graph
         """
         data = self.json_data()
-        req = {"command": "graph_to_svg", "graph": data, "deco": deco}
+        req = {"command": "graph_to_svg", "graph": data, "deco": deco, "draw_root": draw_root}
         reply = send_and_receive(req)
         return reply
 
