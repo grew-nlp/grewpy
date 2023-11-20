@@ -1,15 +1,16 @@
 from sklearn import tree
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 import matplotlib.pyplot as plt
-from sklearn.tree import plot_tree
+from sklearn.tree import plot_tree, export_graphviz
 import math
 import numpy as np
 import re
 import argparse
 import pickle
 
-from rule_forgery import WorkingGRS, adjacent_rules, local_rules, refine_rules
-
+from rule_forgery import WorkingGRS, adjacent_rules, local_rules, refine_rules, feature_value_occurences
+from classifier import back_tree
 # Use local grew lib
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
@@ -47,6 +48,33 @@ def basic_edges(g):
     for n in g.sucs:
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
+
+
+def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, param):
+    while T.impurity[back[n][1]] < param['node_impurity']:
+        n = back[n][1]
+    request = Request(request)  # builds a copy 
+    while n != 0: #0 is the root node
+        right, n = back[n]
+        Z = idx2nkv[T.feature[n]]
+        if isinstance(Z, tuple): #it is a feature pattern
+            m, feat, feat_value = Z
+            feat_value = feat_value.replace('"', '\\"')
+            Z = f'{m}[{feat}="{feat_value}"]'
+        if right:
+            request.append("pattern", Z)
+        else:
+            request.without(Z)                    
+    rule = Rule(request, Commands(Add_edge("X", e, "Y")))
+    return rule
+
+def decision_tree_to_rules(T, res, idx2e, idx2nkv, request):
+    back, leaves = back_tree(T)
+    for n in leaves:
+        e = idx2e[np.argmax( T.value[n])]
+        if e and T.impurity[n] < param['node_impurity']:
+            res.append(node_to_rule(n, e, back, T, request, idx2nkv, param))
+
 
 def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", verbose=0) -> CorpusDraft:
     """
@@ -94,45 +122,75 @@ def append_delete_head(grs : GRSDraft):
         grs[rn].commands.append(Delete_feature("Y", "head"))
     return grs
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog='learner.py',
-                                     description='Learn a grammar from sample files',
-                                     epilog='Use connll files')
+def e_index(d):
+    """
+    given a collection d, maps an index to each element in d
+    """
+    cpt = iter(range(10000000))
+    return {e : next(cpt) for e in d}
 
-    parser.add_argument('train')
-    parser.add_argument('-e', '--eval', default=None)
-    parser.add_argument('--rules', default=None)
-    parser.add_argument('-d','--nodetails',action="store_true")
-    parser.add_argument('--verbose',default=0)
-    parser.add_argument('-c', '--local_rules',action="store_true")
-    parser.add_argument('-w','--web',action='store_true')
-    args = parser.parse_args()
-    if not args.eval:
-        args.eval = args.train
+def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
+    matchings = corpus_gold.search(Request("X[];Y[]"), [])
+    draft = CorpusDraft(corpus_gold)
+    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm'}
+    ccc = feature_value_occurences(matchings, corpus_gold, skipped_features)
+    nkv_idx = e_index(ccc | {'X<Y':None, 'X>Y':None,'X<<Y':None}) #'pos_x':None, 'pos_y':None,
 
-    set_config("sud")
-    param = {
-        "base_threshold": 0.25,
-        "valid_threshold": 0.90,
-        "max_depth": 4,
-        "min_samples_leaf": 5,
-        "feat_value_size_limit": 10,
-        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared', 'head'],
-        "node_impurity": 0.2,
-        "number_of_extra_leaves": 5, 
-        "zipf_feature_criterion" : 0.95, 
-        "min_occurrence_nb" : 10
-    }
-    corpus_gold, corpus_empty = prepare_corpus(args.train)
-    if args.nodetails:
-        corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
+    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
+    edge_idx = e_index(edges)
+
+    X = np.zeros((len(matchings), len(nkv_idx)))
+    y = np.zeros(len(matchings))
+    W = np.zeros_like(y)
+    for i in range(len(matchings)):
+        m = matchings[i]
+        graph = draft[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        for n in nodes:
+            feat = graph[nodes[n]]
+            for k, v in feat.items():
+                if (n, k, v) in nkv_idx:
+                    X[(i,nkv_idx[(n, k, v)])] += 1
+        node_X = m['matching']['nodes']['X']
+        node_Y = m['matching']['nodes']['Y']
+        px = int(node_X)
+        py = int(node_Y)
+        X[(i,nkv_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
+        X[(i,nkv_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
+        X[(i,nkv_idx['X>Y'])]  = 1 if ((px - py) == 1) else 0
+        e = graph.edge(node_X,node_Y)
+        W[i] = 1 if e else 2
+        y[i] = edge_idx[e] 
+    clf = DecisionTreeClassifier(#n_estimators=40, 
+                                 criterion="gini", 
+                                 min_samples_leaf=param["min_samples_leaf"], 
+                                 max_depth=8,
+                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
+    hgb = GradientBoostingClassifier(max_leaf_nodes=50, max_depth=4)
+
+    clf.fit(X, y, sample_weight=W)
+    #hgb.fit(X, y)
+    #plot_tree(clf)
+    #pickle.dump((clf, X,y,edge_idx, nkv_idx), open("hum.pickle", "wb"))
+    """
+    (clf, X,y,edge_idx, nkv_idx) = pickle.load(open("examples/hum.pickle", 'rb'))
+    """
+    idx2nkv = {v:k for k,v in nkv_idx.items()}
+    idx2e = {v:k for k,v in edge_idx.items()}
+    res = []
+    for T in [clf] : #clf.estimators_:
+        decision_tree_to_rules(T.tree_, res, idx2e, idx2nkv, Request("X[];Y[head]"))
+    named_rules = Package({f'r{i}' : res[i] for i in range(len(res))})
+    rules_with_head = append_delete_head(named_rules)
+    grsd = GRSDraft({'Simple' : Package(rules_with_head), 'main' : 'Onf(Simple)'})
+    if args.rules:
+        grsd.save(args.rules)
+    grs = GRS(grsd) #grs.safe_rules()
+    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
+    print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
     
-    A = corpus_gold.count(Request('X<Y;e:X->Y'))
-    A += corpus_gold.count(Request('Y<X;e:X->Y'))
-    print("---target----")
-    print(f"""number of edges within corpus: {corpus_gold.count(Request('e: X -> Y'))}""")
-    print(f"number of adjacent relations: {A}")
 
+def standard_learning_process(corpus_gold, corpus_empty, args, param):
     R0,L0 = adjacent_rules(corpus_gold, param)
     print(len(L0))
     R0e = refine_rules(R0, corpus_gold, param)
@@ -147,9 +205,7 @@ if __name__ == "__main__":
     R00 = GRSDraft(packages)
     R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3))"
     if args.rules:
-        f = open(args.rules, "w")
-        f.write( str(R00) )
-        f.close()
+        R00.save(args.rules)
 
     G00 = GRS(R00)
     if args.web:
@@ -177,6 +233,52 @@ if __name__ == "__main__":
             f.write(str(R00))
             f.close()
         print('done')
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='learner.py',
+                                     description='Learn a grammar from sample files',
+                                     epilog='Use connll files')
+    parser.add_argument('train')
+    parser.add_argument('-e', '--eval', default=None)
+    parser.add_argument('--rules', default=None)
+    parser.add_argument('-d','--nodetails',action="store_true")
+    parser.add_argument('--verbose',default=0)
+    parser.add_argument('-c', '--local_rules',action="store_true")
+    parser.add_argument('-w','--web',action='store_true')
+    parser.add_argument('-l', '--learn', default='')
+    args = parser.parse_args()
+    if not args.eval:
+        args.eval = args.train
+
+    set_config("sud")
+    param = {
+        "base_threshold": 0.25,
+        "valid_threshold": 0.90,
+        "max_depth": 4,
+        "min_samples_leaf": 5,
+        "feat_value_size_limit": 10,
+        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared', 'head'],
+        "node_impurity": 0.25,
+        "number_of_extra_leaves": 5, 
+        "zipf_feature_criterion" : 0.95, 
+        "min_occurrence_nb" : 10
+    }
+    corpus_gold, corpus_empty = prepare_corpus(args.train)
+    if args.nodetails:
+        corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
+    
+    A = corpus_gold.count(Request('X<Y;e:X->Y'))
+    A += corpus_gold.count(Request('Y<X;e:X->Y'))
+    print("---target----")
+    print(f"""number of edges within corpus: {corpus_gold.count(Request('e: X -> Y'))}""")
+    print(f"number of adjacent relations: {A}")
+    print(corpus_gold.count(Request("e:X->Y"), ["e.label"]))
+    if args.learn == 'no_info':
+        zero_knowledge_learning(corpus_gold, corpus_empty, args, param)
+    else:
+        standard_learning_process(corpus_gold, corpus_empty, args, param)
+
+
 
 """
 

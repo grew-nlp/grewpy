@@ -13,6 +13,19 @@ from grewpy.observation import Observation
 from grewpy import Corpus, GRS, set_config
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
 
+def back_tree(T):
+    back = dict()
+    leaves = set()
+    for node in range(T.node_count):
+        g = T.children_left[node]
+        d = T.children_right[node]
+        if g >=0:
+            back[g] = (0,node)
+        if d >= 0:
+            back[d] = (1, node)
+        if g == -1:
+            leaves.add(node)
+    return back, leaves
 
 def feature_value_occurences(matchings, corpus):
     """

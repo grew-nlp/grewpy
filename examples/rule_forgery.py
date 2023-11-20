@@ -11,6 +11,7 @@ from grewpy.graph import Fs_edge
 from grewpy.sketch import Sketch
 from grewpy import Corpus, GRS
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft, Package, Delete_feature
+from sklearn.tree import export_graphviz
 
 cpt = iter(range(1000000))
 
@@ -94,7 +95,10 @@ def refine_rule(R, corpus, param) -> list[Rule]:
     matchings = corpus.search(R)
     clf = classifier.Classifier(matchings, corpus, param)
     if clf.clf:
+        #branc, leaves = classifier.back_tree(clf.clf.tree_)
+        #ileaves = [n for n in leaves if clf.clf.tree_.impurity[n] < param["node_impurity"]]
         branches = clf.find_classes(param)  # extract interesting branches
+        #debranches = classifier.back_tree(clf.clf.tree_)
         for node in branches:
             branch = branches[node]
             request = Request(R)  # builds a new Request
@@ -241,3 +245,32 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
                 edge_between_X_and_Y, 
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param)
+
+def feature_value_occurences(matchings, corpus, skipped_features):
+    """
+    given a matchings corresponding to some request on the corpus,
+    return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
+    within the corpus. n : node name, feature like 'Gender', values like 'Fem'
+    """
+    observation = dict()
+    for m in matchings:
+        graph = corpus[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        for n in nodes:
+            N = graph[nodes[n]]  # feature structure of N
+            for k, v in N.items():
+                if k not in skipped_features:
+                    if (n, k) not in observation:
+                        observation[(n, k)] = dict()
+                    observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
+    obs = dict()
+    for (n,k) in observation:
+        if len(observation[(n,k)]) < 20:
+            for v, o in observation[(n,k)].items():
+                obs[(n,k,v)] = o
+        else:
+            L = [(o,v) for v,o in observation[(n,k)].items()]
+            L.sort(reverse=True)
+            for (o,v) in L[0:20]:
+                obs[(n,k,v)] = o
+    return obs
