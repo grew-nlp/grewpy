@@ -93,6 +93,7 @@ def refine_rule(R, corpus, param) -> list[Rule]:
     """
     res = []
     matchings = corpus.search(R)
+    """
     clf = classifier.Classifier(matchings, corpus, param)
     if clf.clf:
         #branc, leaves = classifier.back_tree(clf.clf.tree_)
@@ -114,6 +115,9 @@ def refine_rule(R, corpus, param) -> list[Rule]:
                 rule = Rule(request, Commands(Add_edge("X", e, "Y")))
                 res.append(rule)
     return res, clf
+    """
+    return classifier.build_rules(matchings, corpus, R, param), None
+
 
 
 def refine_rules(Rs, corpus, param, verbose=False):
@@ -129,7 +133,7 @@ def refine_rules(Rs, corpus, param, verbose=False):
         if v < param["min_occurrence_nb"]:
             pass
         elif v/s < param["valid_threshold"]:
-            new_r, clf = refine_rule(R.request, corpus, param)
+            new_r, _ = refine_rule(R.request, corpus, param)
             if len(new_r) >= 1:
                 if verbose:
                     print("--------------------------replace")
@@ -246,7 +250,7 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
                 no_edge_between_X_and_Y, "e.label")
     return apply_sketches(sadj, corpus, param)
 
-def feature_value_occurences(matchings, corpus, skipped_features):
+def feature_value_occurences(matchings, corpus, skipped_features, max_per_feature):
     """
     given a matchings corresponding to some request on the corpus,
     return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
@@ -271,6 +275,6 @@ def feature_value_occurences(matchings, corpus, skipped_features):
         else:
             L = [(o,v) for v,o in observation[(n,k)].items()]
             L.sort(reverse=True)
-            for (o,v) in L[0:20]:
+            for (o,v) in L[:max_per_feature]:
                 obs[(n,k,v)] = o
     return obs
