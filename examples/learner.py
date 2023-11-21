@@ -8,10 +8,9 @@ import numpy as np
 import re
 import argparse
 import pickle
-import sklearn.preprocessing
 
 from rule_forgery import WorkingGRS, adjacent_rules, local_rules, refine_rules, feature_value_occurences
-from classifier import e_index, decision_tree_to_rules
+from classifier import back_tree
 # Use local grew lib
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
@@ -50,6 +49,45 @@ def basic_edges(g):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
+
+def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, idx2e, param, known_nodes):
+    while n: #find the shortest path leading to e with impurity lower than threshold, we start with a leaf, so we go to the root
+        father = back[n][1]
+        ef = idx2e[np.argmax(T.value [ father ] )] #prevalent edge of the father
+        if ef is None or ef != e:
+            break
+        if T.impurity[father] > param['node_impurity']:
+            break
+        n = father
+    if not n:
+        return []
+    if n in known_nodes: #this node has been seen in the past, no rules is synthesized
+        return []
+    known_nodes.add(n)
+    request = Request(request)  # builds a copy 
+    while n != 0: #0 is the root node
+        right, n = back[n]
+        Z = idx2nkv[T.feature[n]]
+        if isinstance(Z, tuple): #it is a feature pattern
+            m, feat, feat_value = Z
+            feat_value = feat_value.replace('"', '\\"')
+            Z = f'{m}[{feat}="{feat_value}"]'
+        if right:
+            request.append("pattern", Z)
+        else:
+            request.without(Z)                    
+    rule = Rule(request, Commands(Add_edge("X", e, "Y")))
+    return [rule]
+
+def decision_tree_to_rules(T, idx2e, idx2nkv, request, param):
+    back, leaves = back_tree(T)
+    known_nodes = set()
+    res = []
+    for n in leaves:
+        e = idx2e[np.argmax( T.value[n])]
+        if e and T.impurity[n] < param['node_impurity']:
+            res += node_to_rule(n, e, back, T, request, idx2nkv, idx2e, param, known_nodes)
+    return res
 
 
 def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", verbose=0) -> CorpusDraft:
@@ -98,36 +136,18 @@ def append_delete_head(grs : GRSDraft):
         grs[rn].commands.append(Delete_feature("Y", "head"))
     return grs
 
-def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
-    #matchings = corpus_gold.search(Request("X[];Y[]"), [])
-    draft = CorpusDraft(corpus_gold)
-    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm', 'head'}
-    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
-    edge_idx = e_index(edges)
-    
-    """very alt
+def e_index(d):
     """
+    given a collection d, maps an index to each element in d
     """
-    l = []
-    for sid in draft:
-        graph = draft[sid]
-        for n in graph:
-            l += [(f'X{k}', v) for k,v in graph[n].items() if k not in skipped_features]
-            l += [(f'Y{k}', v) for k,v in graph[n].items() if k not in skipped_features]
-    
-    enc = sklearn.preprocessing.OrdinalEncoder(max)
-    enc.fit(l)
-    print(enc.categories_)
-    """
+    cpt = iter(range(10000000))
+    return {e : next(cpt) for e in d}
 
-
-    """
-    alt
-    """
+def nkv(corpus, skipped_features, max_feature_values=50):
     observations = dict()
     pair_number = 0
-    for sid in draft:
-        graph = draft[sid]
+    for sid in corpus:
+        graph = corpus[sid]
         pair_number += len(graph)**2 - len(graph)
         for n in graph:
             N = graph[n]  # feature structure of N
@@ -136,25 +156,25 @@ def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
                     if k not in observations:
                         observations[k] = dict()
                     observations[k][v] = observations[k].get(v, 0)+1
-    """
-    restrict feature values to those useful for a decision tree
-    """
-    ccc =  dict()
+    ccc =  set()
     for k in observations:
         T = sorted([(n,v) for v,n in observations[k].items()], reverse=True)
-        for n,v in T[:50]:
-            ccc[(k,v)] = None
-    nkv = {('X',)+k : 0 for k in ccc} | {('Y',)+k : 0 for k in ccc} | {'X<Y' : None, 'X>Y' : None, 'X<<Y' : None}
-    ccc.clear()
-    observations.clear()
+        for n,v in T[:max_feature_values]:
+            ccc.add((k,v))
+    nkv = {('X',)+k for k in ccc} | {('Y',)+k for k in ccc} | {'X<Y', 'X>Y', 'X<<Y'}
     nkv_idx = e_index(nkv)
+    return nkv_idx, pair_number
+
+def build_Xy(corpus, skipped_features, edge_idx):
     print("preprocessing")    
-    X = np.zeros((pair_number, len(nkv_idx)))
-    y = np.zeros(pair_number)
-    W = np.zeros_like(y)
+    nkv_idx, XY_number = nkv(corpus, skipped_features)
+    X = np.zeros((XY_number, len(nkv_idx)))
+    y = np.zeros(XY_number)
+    W = np.ones(XY_number)
+
     cpt = 0
-    for sid in draft:
-        graph = draft[sid]
+    for sid in corpus:
+        graph = corpus[sid]
         for Xn in graph:
             for Yn in graph:
                 if Xn != Yn:
@@ -173,19 +193,50 @@ def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
                     W[cpt] = 1 if e else 1
                     y[cpt] = edge_idx[e]
                     cpt += 1
-    clf = DecisionTreeClassifier(#n_estimators=40, 
-                                 criterion="gini", 
+    print("llll = ", XY_number)
+    return X,y,W, nkv_idx
+    
+def build_Xy_by_grew(corpus_gold, draft, request, skipped_features, edge_idx):
+    matchings = corpus_gold.search(request, [])
+    ccc = feature_value_occurences(matchings, corpus_gold, skipped_features)
+    nkv_idx = e_index(ccc | {'X<Y':None, 'X>Y':None,'X<<Y':None}) #'pos_x':None, 'pos_y':None,
+    X = np.zeros((len(matchings), len(nkv_idx)))
+    y = np.zeros(len(matchings))
+    W = np.zeros_like(y)
+    for i in range(len(matchings)):
+        m = matchings[i]
+        graph = draft[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        for n in nodes:
+            feat = graph[nodes[n]]
+            for k, v in feat.items():
+                if (n, k, v) in nkv_idx:
+                    X[(i,nkv_idx[(n, k, v)])] += 1
+        node_X = m['matching']['nodes']['X']
+        node_Y = m['matching']['nodes']['Y']
+        px = int(node_X)
+        py = int(node_Y)
+        X[(i,nkv_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
+        X[(i,nkv_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
+        X[(i,nkv_idx['X>Y'])]  = 1 if ((px - py) == 1) else 0
+        e = graph.edge(node_X,node_Y)
+        W[i] = 1 if e else 2
+        y[i] = edge_idx[e]
+    return X,y,W, nkv_idx
+    
+def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
+    draft = CorpusDraft(corpus_gold)
+    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm'}
+    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
+    edge_idx = e_index(edges)
+
+    X,y,W,nkv_idx = build_Xy(draft, skipped_features, edge_idx)#build_Xy_by_grew(corpus_gold, draft, Request("X[];Y[]"),skipped_features, edge_idx) #
+    clf = DecisionTreeClassifier(criterion="gini", 
                                  min_samples_leaf=param["min_samples_leaf"], 
                                  max_depth=8,
                                  class_weight={ edge_idx[e] : edges[e] for e in edges})
     print("learning")
     clf.fit(X, y, sample_weight=W)
-    #hgb.fit(X, y)
-    #plot_tree(clf)
-    #pickle.dump((clf, X,y,edge_idx, nkv_idx), open("hum.pickle", "wb"))
-    """
-    (clf, X,y,edge_idx, nkv_idx) = pickle.load(open("examples/hum.pickle", 'rb'))
-    """
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     idx2e = {v:k for k,v in edge_idx.items()}
     res = []
@@ -196,74 +247,44 @@ def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
     grsd = GRSDraft({'Simple' : Package(rules_with_head), 'main' : 'Onf(Simple)'})
     if args.rules:
         grsd.save(args.rules)
-    grs = GRS(grsd) #grs.safe_rules()
+    grs = GRS(grsd)
+    print("testing")
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-    
-def zero_knowledge_learning_by_upos(corpus_gold, corpus_empty, args, param):
-    #matchings = corpus_gold.search(Request("X[];Y[]"), [])
-    draft = CorpusDraft(corpus_gold)
-    upos_list = list(corpus_gold.count(Request("X[]"), ["X.upos"]).keys())
-    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm', 'head'}
-    res = []
-    xypos = [(xupos,yupos) for xupos in upos_list for yupos in upos_list]
-    for (xupos,yupos) in xypos:
-        tt = corpus_gold.count(Request(f"e:X->Y;X[upos={xupos}];Y[upos={yupos}]"), ["e.label"])
-        if tt:
-            edges = {Fs_edge(x) : 1 for x in tt} | {None : 1.1}
-            edge_idx = e_index(edges)
-            matchings = corpus_gold.search(Request(f"X[upos={xupos}];Y[upos={yupos}]"))
-            ccc = feature_value_occurences(matchings, corpus_gold, skipped_features, 20)
-            nkv_idx = e_index(ccc | {'X<Y':None, 'X>Y':None,'X<<Y':None}) #'pos_x':None, 'pos_y':None,
-            ccc.clear()
-            X = np.zeros((len(matchings), len(nkv_idx)))
-            y = np.zeros(len(matchings))
-            W = np.zeros_like(y)
-            for i in range(len(matchings)):
-                m = matchings[i]
-                graph = draft[m["sent_id"]]
-                nodes = m['matching']['nodes']
-                for n in nodes:
-                    feat = graph[nodes[n]]
-                    for k, v in feat.items():
-                        if (n, k, v) in nkv_idx:
-                            X[(i,nkv_idx[(n, k, v)])] += 1
-                node_X = m['matching']['nodes']['X']
-                node_Y = m['matching']['nodes']['Y']
-                px = int(node_X)
-                py = int(node_Y)
-                X[(i,nkv_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
-                X[(i,nkv_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
-                X[(i,nkv_idx['X>Y'])]  = 1 if ((px - py) == 1) else 0
-                e = graph.edge(node_X,node_Y)
-                W[i] = 1 if e else 2
-                y[i] = edge_idx[e] 
-            clf = DecisionTreeClassifier(#n_estimators=40, 
-                                 criterion="gini", 
+
+def add_rules(draft, xupos, yupos, edges, edge_idx, skipped_features):
+    X,y,W,nkv_idx = build_Xy_by_grew(corpus_gold, draft, Request(f"X[upos={xupos}];Y[upos={yupos}]"),skipped_features, edge_idx) #
+    clf = DecisionTreeClassifier(criterion="gini", 
                                  min_samples_leaf=param["min_samples_leaf"], 
                                  max_depth=8,
                                  class_weight={ edge_idx[e] : edges[e] for e in edges})
-            print(f"learning {xupos,yupos}")
-            clf.fit(X, y, sample_weight=W)
-            idx2nkv = {v:k for k,v in nkv_idx.items()}
-            idx2e = {v:k for k,v in edge_idx.items()}
-    
-            for T in [clf] : #clf.estimators_:
-                xypos_rules = decision_tree_to_rules(T.tree_, idx2e, idx2nkv, Request(f"X[upos={xupos}];Y[upos={yupos},head]"), param)
-                print("----")
-                print(xypos_rules)
-                print("----")
-                res += xypos_rules
-    
+    print("learning")
+    clf.fit(X, y, sample_weight=W)
+    idx2nkv = {v:k for k,v in nkv_idx.items()}
+    idx2e = {v:k for k,v in edge_idx.items()}
+    return decision_tree_to_rules(clf.tree_, idx2e, idx2nkv, Request(f"X[upos={xupos}];Y[upos={yupos},head]"), param)
+
+def zero_knowledge_learning_but_upos(corpus_gold, corpus_empty, args, param):
+    draft = CorpusDraft(corpus_gold)
+    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm'}
+    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
+    edge_idx = e_index(edges)
+    uposes = list( corpus_gold.count(Request("X[]"), ["X.upos"]).keys())
+    xypos = [(xupos,yupos) for xupos in uposes for yupos in uposes]
+    res = []
+    for (xupos,yupos) in xypos:
+        if corpus_gold.count(Request(f"e:X->Y;X[upos={xupos}];Y[upos={yupos}]"), ["e.label"]):
+            res += add_rules(draft, xupos, yupos, edges, edge_idx, skipped_features)
     named_rules = Package({f'r{i}' : res[i] for i in range(len(res))})
     rules_with_head = append_delete_head(named_rules)
     grsd = GRSDraft({'Simple' : Package(rules_with_head), 'main' : 'Onf(Simple)'})
     if args.rules:
         grsd.save(args.rules)
-    grs = GRS(grsd) #grs.safe_rules()
+    grs = GRS(grsd)
+    print("testing")
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-
+    
 
 def standard_learning_process(corpus_gold, corpus_empty, args, param):
     R0,L0 = adjacent_rules(corpus_gold, param)
@@ -332,7 +353,7 @@ if __name__ == "__main__":
         "max_depth": 4,
         "min_samples_leaf": 5,
         "feat_value_size_limit": 10,
-        "skip_features": ['xpos', 'SpaceAfter', 'Shared', 'head'],
+        "skip_features": ['xpos', 'upos', 'SpaceAfter', 'Shared', 'head'],
         "node_impurity": 0.15,
         "number_of_extra_leaves": 5, 
         "zipf_feature_criterion" : 0.95, 
@@ -351,7 +372,7 @@ if __name__ == "__main__":
     if args.learn == 'no_info':
         zero_knowledge_learning(corpus_gold, corpus_empty, args, param)
     elif args.learn == 'no_info_but_upos':
-        zero_knowledge_learning_by_upos(corpus_gold, corpus_empty, args, param)
+        zero_knowledge_learning_but_upos(corpus_gold, corpus_empty, args, param)
     else:
         standard_learning_process(corpus_gold, corpus_empty, args, param)
 
