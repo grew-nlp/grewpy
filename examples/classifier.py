@@ -27,28 +27,29 @@ def back_tree(T):
             leaves.add(node)
     return back, leaves
 
-def feature_value_occurences(matchings, corpus):
-    """
-    given a matchings corresponding to some request on the corpus,
-    return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
-    within the corpus. n : node name, feature like 'Gender', values like 'Fem'
-    """
-    observation = Observation()
-    for m in matchings:
-        graph = corpus[m["sent_id"]]
-        nodes = m['matching']['nodes']
-        for n in nodes:
-            N = graph[nodes[n]]  # feature structure of N
-            for k, v in N.items():
-                if (n, k) not in observation:
-                    observation[(n, k)] = dict()
-                observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
-    return observation
 
 def feature_values_for_decision(matchings, corpus, param, nodes):
     """
     restrict feature values to those useful for a decision tree
     """
+    def feature_value_occurences(matchings, corpus):
+        """
+    given a matchings corresponding to some request on the corpus,
+    return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
+    within the corpus. n : node name, feature like 'Gender', values like 'Fem'
+        """
+        observation = Observation()
+        for m in matchings:
+            graph = corpus[m["sent_id"]]
+            nodes = m['matching']['nodes']
+            for n in nodes:
+                N = graph[nodes[n]]  # feature structure of N
+                for k, v in N.items():
+                    if (n, k) not in observation:
+                        observation[(n, k)] = dict()
+                    observation[(n, k)][v] = observation[(n, k)].get(v, 0)+1
+        return observation
+
     observation = feature_value_occurences(matchings, corpus)
     features = dict()
     for (n,k) in observation:
@@ -56,6 +57,84 @@ def feature_values_for_decision(matchings, corpus, param, nodes):
             for v in observation.zipf(n, k, param["feat_value_size_limit"], param["zipf_feature_criterion"]):
                 features[(n,k,v)] = observation[(n,k)][v]
     return features
+
+def e_index(d):
+    """
+    given a collection d, maps an index to each element in d
+    """
+    cpt = iter(range(10000000))
+    return {e : next(cpt) for e in d}
+
+def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, param, internal_node):
+    while n and back[n][1] and T.impurity[back[n][1]] < param['node_impurity']:
+        if back[n][1]:
+            n = back[n][1]
+    if n in internal_node:
+        return None
+    if not n:
+        return None
+    request = Request(request)  # builds a copy 
+    while n != 0: #0 is the root node
+        right, n = back[n]
+        Z = idx2nkv[T.feature[n]]
+        if isinstance(Z, tuple): #it is a feature pattern
+            m, feat, feat_value = Z
+            feat_value = feat_value.replace('"', '\\"')
+            Z = f'{m}[{feat}="{feat_value}"]'
+        if right:
+            request.append("pattern", Z)
+        else:
+            request.without(Z)                    
+    rule = Rule(request, Commands(Add_edge("X", e, "Y")))
+    return rule
+
+def decision_tree_to_rules(T, idx2e, idx2nkv, request, param):
+    back, leaves = back_tree(T)
+    internal_node = set()
+    rules = []
+    for n in leaves:
+        e = idx2e[np.argmax(T.value[n])]
+        if e and n and T.impurity[n] < param['node_impurity']:
+            r = node_to_rule(n, e, back, T, request, idx2nkv, param, internal_node)
+            if r:
+                rules.append(r)
+    return rules
+
+def build_rules(matchings, corpus, R, param):
+    features = list(feature_values_for_decision(matchings, corpus, param, ['X', 'Y']).keys())
+    features_idx = e_index(features)
+    X, edge_idx, y = list(), dict(), list()
+    for m in matchings:
+        # each matching will lead to an obs which is a list of 0/1 values
+        graph = corpus[m["sent_id"]]
+        nodes = m['matching']['nodes']
+        obs = [0]*len(features_idx)
+        for n in nodes:
+            feat = graph[nodes[n]]
+            for k, v in feat.items():
+                if (n, k, v) in features_idx:
+                    obs[features_idx[(n, k, v)]] = 1
+        es = graph.edges(nodes['X'], nodes['Y'])
+        if len(es) > 1:
+            print("mmmmhh that should not happen")
+        elif len(es) <= 1:
+            e = es.pop() if es else None
+            if e not in edge_idx:
+                edge_idx[e] = len(edge_idx)
+            y.append(edge_idx[e])
+            X.append(obs)
+    if not y:
+        return []
+    clf = DecisionTreeClassifier(max_depth=param["max_depth"],
+                                max_leaf_nodes=max(y)+param["number_of_extra_leaves"],
+                min_samples_leaf=param["min_samples_leaf"],
+                criterion="gini")
+    clf.fit(X, y)
+    res = []
+    idx2e = {i : v for v,i in edge_idx.items()}
+    decision_tree_to_rules(clf.tree_, res, idx2e, features, R, param)
+    return res
+    
 
 class Classifier():
     def __init__(self, matchings, corpus, param):
@@ -128,3 +207,5 @@ class Classifier():
         acc = dict()
         clf.branches(0, tuple(), acc, param["node_impurity"])
         return acc
+
+
