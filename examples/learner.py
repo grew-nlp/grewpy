@@ -90,6 +90,31 @@ def decision_tree_to_rules(T, idx2e, idx2nkv, request, param):
     return res
 
 
+def forbidden_patterns(T, idx2e, idx2nkv, request, param):
+    back, leaves = back_tree(T)
+    internal_node = set()
+    empty_patterns = []
+    for n in leaves:
+        if not idx2e[np.argmax(T.value[n])]:
+            while n and back[n][1] and T.impurity[ back[n][1] ] <= 0.0001:
+                n = back[n][1]
+            if n and n not in internal_node and T.impurity[ n ] <= 0.0001:
+                internal_node.add(n)
+                req = Request(request)  # builds a copy 
+                while n != 0: #0 is the root node
+                    right, n = back[n]
+                    Z = idx2nkv[T.feature[n]]
+                    if isinstance(Z, tuple): #it is a feature pattern
+                        m, feat, feat_value = Z
+                        feat_value = feat_value.replace('"', '\\"')
+                        Z = f'{m}[{feat}="{feat_value}"]'
+                    if right:
+                        req.append("pattern", Z)
+                    else:
+                        req.without(Z)  
+                empty_patterns.append( req)
+    return empty_patterns
+
 def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", verbose=0) -> CorpusDraft:
     """
     grs is a GRSDraft
@@ -102,12 +127,12 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", ver
 
     solutions = grs.run(corpus_start)
     corpus = CorpusDraft(corpus_start)
-    print(len(corpus_gold))
-    i = 0
+    #print(len(corpus_gold))
+    #i = 0
     for sid in corpus_gold:
-        if i % (len(corpus_gold)//1) == 0:
-            print(i)
-        i += 1
+        #if i % (len(corpus_gold)//1) == 0:
+        #    print(i)
+        #i += 1
         #gs = grs.run(corpus_start[sid], 'main')
         best_fscore = 0
         for g in solutions[sid]:
@@ -116,6 +141,33 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", ver
                 best_fscore = fs
                 corpus[sid] = g
     return corpus
+
+def diff_by_edge_value(corpus_gold, corpus):
+    def filter(E,e):
+        return {(m,n) for m,f,n in E if f == e}
+    res = dict()
+    for sid in corpus_gold:
+        G1 = corpus_gold[sid]
+        G2 = corpus[sid]
+        E1 = set(G1.triples())
+        E2 = set(G2.triples())
+        edges = {e for (m,e,n) in E1} | {e for (m,e,n) in E2}
+        res = res | {e : (0,0,0) for e in edges - set(res.keys())}
+        for e in edges:
+            c,l,r = res[e]
+            E1e = filter(E1,e)
+            E2e = filter(E2,e)
+            c += len(E1e & E2e)
+            l += len(E1e - E2e)
+            r += len(E2e - E1e)
+            res[e] = (c,l,r)
+    return res
+
+    
+        
+
+        
+
 
 def pack(s):
     if re.search("f[XYZ]", s):
@@ -193,12 +245,11 @@ def build_Xy(corpus, skipped_features, edge_idx):
                     W[cpt] = 1 if e else 1
                     y[cpt] = edge_idx[e]
                     cpt += 1
-    print("llll = ", XY_number)
     return X,y,W, nkv_idx
     
 def build_Xy_by_grew(corpus_gold, draft, request, skipped_features, edge_idx):
     matchings = corpus_gold.search(request, [])
-    ccc = feature_value_occurences(matchings, corpus_gold, skipped_features)
+    ccc = feature_value_occurences(matchings, corpus_gold, skipped_features, 50)
     nkv_idx = e_index(ccc | {'X<Y':None, 'X>Y':None,'X<<Y':None}) #'pos_x':None, 'pos_y':None,
     X = np.zeros((len(matchings), len(nkv_idx)))
     y = np.zeros(len(matchings))
@@ -212,14 +263,14 @@ def build_Xy_by_grew(corpus_gold, draft, request, skipped_features, edge_idx):
             for k, v in feat.items():
                 if (n, k, v) in nkv_idx:
                     X[(i,nkv_idx[(n, k, v)])] += 1
-        node_X = m['matching']['nodes']['X']
-        node_Y = m['matching']['nodes']['Y']
-        px = int(node_X)
-        py = int(node_Y)
+        Xn = nodes['X']
+        Yn = nodes['Y']
+        px = int(Xn)
+        py = int(Yn)
         X[(i,nkv_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
         X[(i,nkv_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
         X[(i,nkv_idx['X>Y'])]  = 1 if ((px - py) == 1) else 0
-        e = graph.edge(node_X,node_Y)
+        e = graph.edge(Xn,Yn)
         W[i] = 1 if e else 2
         y[i] = edge_idx[e]
     return X,y,W, nkv_idx
@@ -251,6 +302,54 @@ def zero_knowledge_learning(corpus_gold, corpus_empty, args, param):
     print("testing")
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
+    print(diff_by_edge_value(currently_computed_corpus, draft))
+    if args.web:
+        web = grew_web.Grew_web()
+        print(web.url())
+        web.load_corpus(corpus_empty)
+        web.load_grs(grs)
+
+def zero_knowledge_voids(corpus_gold, corpus_empty, args, param):
+    draft = CorpusDraft(corpus_gold)
+    skipped_features = {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm'}
+    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
+    edge_idx = e_index(edges)
+
+    X,y,W,nkv_idx = build_Xy(draft, skipped_features, edge_idx)#build_Xy_by_grew(corpus_gold, draft, Request("X[];Y[]"),skipped_features, edge_idx) #
+    clf = DecisionTreeClassifier(criterion="gini", 
+                                 min_samples_leaf=param["min_samples_leaf"], 
+                                 max_depth=8,
+                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
+    print("learning")
+    clf.fit(X, y, sample_weight=W)
+    idx2nkv = {v:k for k,v in nkv_idx.items()}
+    idx2e = {v:k for k,v in edge_idx.items()}
+    voids = []
+    for T in [clf] : #clf.estimators_:
+        vds = forbidden_patterns(T.tree_, idx2e, idx2nkv, Request("X[];Y[head];e:X->Y"), param)
+        voids += vds
+    if args.rules:
+        f = open(args.rules, "w")
+        for pattern in voids:
+            f.write(str(pattern))
+            f.write("\n")
+        f.close()
+    print("testing")
+    for request in voids:
+        p = corpus_gold.search(request)
+        if p:
+            print("found some forbidden pattern")
+            print(p)
+            print( str(request) )
+    if args.web:
+        empty_rules = [ Rule( request, Commands()) for request in voids]
+        empty_rules = { f"rule{i}" : empty_rules[i] for i in range(len(empty_rules))} #give a name
+        web = grew_web.Grew_web()
+        print(web.url())
+        web.load_corpus(corpus_gold)
+        web.load_grs(GRS(empty_rules))
+
+
 
 def add_rules(draft, xupos, yupos, edges, edge_idx, skipped_features):
     X,y,W,nkv_idx = build_Xy_by_grew(corpus_gold, draft, Request(f"X[upos={xupos}];Y[upos={yupos}]"),skipped_features, edge_idx) #
@@ -284,6 +383,11 @@ def zero_knowledge_learning_but_upos(corpus_gold, corpus_empty, args, param):
     print("testing")
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
+    if args.web:
+        web = grew_web.Grew_web()
+        print(web.url())
+        web.load_corpus(corpus_empty)
+        web.load_grs(grs)
     
 
 def standard_learning_process(corpus_gold, corpus_empty, args, param):
@@ -373,6 +477,8 @@ if __name__ == "__main__":
         zero_knowledge_learning(corpus_gold, corpus_empty, args, param)
     elif args.learn == 'no_info_but_upos':
         zero_knowledge_learning_but_upos(corpus_gold, corpus_empty, args, param)
+    elif args.learn == "empty" :
+        zero_knowledge_voids(corpus_gold, corpus_empty, args, param)
     else:
         standard_learning_process(corpus_gold, corpus_empty, args, param)
 

@@ -67,8 +67,7 @@ def e_index(d):
 
 def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, param, internal_node):
     while n and back[n][1] and T.impurity[back[n][1]] < param['node_impurity']:
-        if back[n][1]:
-            n = back[n][1]
+        n = back[n][1]
     if n in internal_node:
         return None
     if not n:
@@ -88,16 +87,36 @@ def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, param, intern
     rule = Rule(request, Commands(Add_edge("X", e, "Y")))
     return rule
 
-def decision_tree_to_rules(T, idx2e, idx2nkv, request, param):
+def decision_tree_to_rules(T, idx2e, idx2nkv, request, param, empty_patterns_required):
     back, leaves = back_tree(T)
     internal_node = set()
     rules = []
+    empty_patterns = []
     for n in leaves:
         e = idx2e[np.argmax(T.value[n])]
         if e and n and T.impurity[n] < param['node_impurity']:
             r = node_to_rule(n, e, back, T, request, idx2nkv, param, internal_node)
             if r:
                 rules.append(r)
+        else:
+            while n and back[n][1] and T.impurity[ back[n][1] ] <= 0.0001:
+                n = back[n][1]
+            if n:
+                request = Request(request)  # builds a copy 
+                while n != 0: #0 is the root node
+                    right, n = back[n]
+                    Z = idx2nkv[T.feature[n]]
+                    if isinstance(Z, tuple): #it is a feature pattern
+                        m, feat, feat_value = Z
+                        feat_value = feat_value.replace('"', '\\"')
+                        Z = f'{m}[{feat}="{feat_value}"]'
+                    if right:
+                        request.append("pattern", Z)
+                    else:
+                        request.without(Z)  
+                empty_patterns.append( request)
+    if empty_patterns_required:
+        return rules, empty_patterns
     return rules
 
 def build_rules(matchings, corpus, R, param):
