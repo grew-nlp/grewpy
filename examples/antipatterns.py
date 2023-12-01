@@ -33,6 +33,41 @@ def basic_edges(g):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
+def build_request(T, n, back, request, idx2nkv):
+    req = Request(request)  # builds a copy 
+    pos_order = list()
+    neg_order = list()
+    pos_feat = dict()
+    neg_feat = dict()
+    while n != 0: #0 is the root node
+        right, n = back[n]
+        Z = idx2nkv[T.feature[n]]
+        if isinstance(Z, tuple): #it is a feature pattern
+            m, feat, feat_value = Z
+            feat_value = feat_value.replace('"', '\\"')
+            Z = f'{m}[{feat}="{feat_value}"]'
+            if right:
+                pos_feat[(m,feat)] = Z
+            else:
+                if (m,feat) not in neg_feat:
+                    neg_feat[(m,feat)] = []
+                neg_feat[(m,feat)].append(Z)
+        else:
+            if right:
+                pos_order.append(Z)
+            else:
+                neg_order.append(Z)
+    if pos_order:
+        req.append("pattern", ";".join(pos_order))
+    if pos_feat:
+        req.append("pattern", ";".join(pos_feat.values()))
+    for n in neg_order:
+        req.without(n)
+    good_negatives = [(m,f) for (m,f) in neg_feat if (m,f) not in pos_feat]
+    for n in good_negatives:
+        for c in neg_feat[n]:
+            req.without(c)
+    return req
 
 def forbidden_patterns(T, idx2e, idx2nkv, request, param):
     back, leaves = back_tree(T)
@@ -45,19 +80,7 @@ def forbidden_patterns(T, idx2e, idx2nkv, request, param):
                 n = back[n][1]
             if n and n not in internal_node and T.impurity[ n ] <= param['threshold']:
                 internal_node.add(n)
-                req = Request(request)  # builds a copy 
-                while n != 0: #0 is the root node
-                    right, n = back[n]
-                    Z = idx2nkv[T.feature[n]]
-                    if isinstance(Z, tuple): #it is a feature pattern
-                        m, feat, feat_value = Z
-                        feat_value = feat_value.replace('"', '\\"')
-                        Z = f'{m}[{feat}="{feat_value}"]'
-                    if right:
-                        req.append("pattern", Z)
-                    else:
-                        req.without(Z)  
-                empty_patterns.append( req)
+                empty_patterns.append( build_request(T, n, back, request, idx2nkv))
     return empty_patterns
 
 def nkv(corpus, skipped_features, max_feature_values=50):
