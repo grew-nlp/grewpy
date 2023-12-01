@@ -47,7 +47,7 @@ def build_request(T, n, back, request, idx2nkv):
             feat_value = feat_value.replace('"', '\\"')
             Z = f'{m}[{feat}="{feat_value}"]'
             if right:
-                pos_feat[(m,feat)] = Z
+                pos_feat[(m,feat)] = feat_value
             else:
                 if (m,feat) not in neg_feat:
                     neg_feat[(m,feat)] = []
@@ -60,7 +60,11 @@ def build_request(T, n, back, request, idx2nkv):
     if pos_order:
         req.append("pattern", ";".join(pos_order))
     if pos_feat:
-        req.append("pattern", ";".join(pos_feat.values()))
+        Xf = [f for (m,f) in pos_feat if m == 'X']
+        xf = ",".join( f'''{f}="{pos_feat[('X',f)]}"''' for f in Xf)
+        Yf = [f for (m,f) in pos_feat if m == 'Y']
+        yf = ",".join( f'''{f}="{pos_feat[('Y',f)]}"''' for f in Yf)
+        req.append("pattern", f'X[{xf}];Y[{yf}]')
     for n in neg_order:
         req.without(n)
     good_negatives = [(m,f) for (m,f) in neg_feat if (m,f) not in pos_feat]
@@ -154,7 +158,7 @@ def zero_knowledge_voids(corpus_gold, args, param):
     if args.forbidden:
         f = open(args.forbidden, "w")
         for pattern in voids:
-            f.write(f"###\n{str(pattern)}\n")
+            f.write(f"%%%\n{str(pattern)}\n")
         f.close()
     print("testing patterns")
     found = False
@@ -183,7 +187,7 @@ def parse_request(filename):
     current_pattern = None
     with open (filename) as f: #we parse the file
         for line in f:
-            if '###' in line:
+            if '%%%' in line:
                 if current_pattern:
                     excluded.append(current_pattern)
                 current_pattern = Request()
