@@ -64,7 +64,18 @@ class Fs_edge(dict):
             else:
                 Fs_edge.extract(s,clauses)
         return clauses
-
+    
+    def __str__(self):
+        """
+        sud style
+        """
+        s=self['1']
+        if '2' in self:
+            s = f"{s}:{self['2']}"
+        if 'deep' in self:
+            s = f"{s}@{self['deep']}"
+        return s
+        
 class Graph():
     """
     a dict mapping node keys to feature structure

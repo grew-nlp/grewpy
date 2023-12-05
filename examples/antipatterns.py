@@ -73,12 +73,15 @@ def build_request(T, n, back, request, idx2nkv):
             req.without(c)
     return req
 
-def forbidden_patterns(T, idx2e, idx2nkv, request, param):
+def forbidden_patterns(T, idx2nkv, request, param, y0):
+    """
+    list patterns reaching prediction y0 within T
+    """
     back, leaves = back_tree(T)
     internal_node = set()
     empty_patterns = []
     for n in leaves:
-        if not idx2e[np.argmax(T.value[n])]: #no edge is majority
+        if np.argmax(T.value[n]) == y0: #y0 is majority
             while n and back[n][1] and T.impurity[ back[n][1] ] <= param['threshold']:
                 #most general unifier
                 n = back[n][1]
@@ -146,15 +149,14 @@ def zero_knowledge_voids(corpus_gold, args, param):
     edge_idx = e_index(edges)
 
     X,y,W,nkv_idx = build_Xy(draft, skipped_features, edge_idx)
-    clf = DecisionTreeClassifier(criterion="gini", 
+    clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
-                                 max_depth=8,
+                                 max_depth=args.depth,
                                  class_weight={ edge_idx[e] : edges[e] for e in edges})
     print("learning")
     clf.fit(X, y, sample_weight=W)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
-    idx2e = {v:k for k,v in edge_idx.items()}
-    voids = forbidden_patterns(clf.tree_, idx2e, idx2nkv, Request("X[];Y[];e:X->Y"), param)
+    voids = forbidden_patterns(clf.tree_, idx2nkv, Request("X[];Y[];e:X->Y"), param, edge_idx[None])
     if args.forbidden:
         f = open(args.forbidden, "w")
         for pattern in voids:
@@ -178,6 +180,38 @@ def zero_knowledge_voids(corpus_gold, args, param):
         print(f"go to {web.url()}")
         web.load_corpus(corpus_gold)
         web.load_grs(GRS(empty_rules))
+    if args.e:
+        none_idx = edge_idx[None]
+        if args.forbidden:
+            f = open(args.forbidden, "+a")
+
+        for e in edges:
+            idx = edge_idx[e]
+            if idx != none_idx:
+                y0 = np.where(y == idx, 0, 1)
+                clf = DecisionTreeClassifier(criterion="gini", 
+                                 min_samples_leaf=param["min_samples_leaf"], 
+                                 max_depth=args.depth,
+                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
+                print("learning")
+                clf.fit(X, y0, sample_weight=W)
+                voids = forbidden_patterns(clf.tree_, idx2nkv, Request(f"X[];Y[];e:X-[{str(e)}]->Y"), param,1)
+                if args.forbidden:                  
+                    for pattern in voids:
+                        f.write(f"%%%\n{str(pattern)}\n")
+                print("testing patterns")
+                found = False
+                for request in voids:
+                    lines = corpus_gold.search(request)
+                    if lines:
+                        print(f"forbidden pattern\n{request}\n")
+                        print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}
+""")
+                        found = True
+        if args.forbidden:
+            f.close()
+
+
 
 def parse_request(filename):
     """
@@ -223,10 +257,11 @@ if __name__ == "__main__":
     parser.add_argument('action', help="action in [learn, verify]")
     parser.add_argument('corpus', help='a conll file')
     parser.add_argument('-f', '--forbidden', default=None, help="filename for the antipatterns")
-    parser.add_argument('-t', '--threshold', default=1e-4, help="minimal threshold to consider a node as pure")
+    parser.add_argument('-t', '--threshold', default=1e-10, help="minimal threshold to consider a node as pure")
     parser.add_argument('-s','--nodetails',action="store_true", help="simplifies edges: replace comp:obl by comp")
     parser.add_argument('-w', '--web', action="store_true", help="for a debugging session")
     parser.add_argument('-d', '--depth', default=8, help="depth of the binary decision tree")
+    parser.add_argument('-e', action="store_true", help="will learn patterns ensuring there is no edge X-[e]->Y, with e=(subj,det,...)")
     args = parser.parse_args()
     set_config("sud")
     param = {
