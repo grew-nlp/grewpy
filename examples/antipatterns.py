@@ -33,47 +33,62 @@ def basic_edges(g):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
-def build_request(T, n, back, request, idx2nkv):
-    req = Request(request)  # builds a copy 
-    pos_order = list()
-    neg_order = list()
-    pos_feat = dict()
-    neg_feat = dict()
+def branch(n, back):
+    """
+    compute the branch from root node 0 to n
+    """
+    branch = []
     while n != 0: #0 is the root node
-        right, n = back[n]
-        Z = idx2nkv[T.feature[n]]
-        if isinstance(Z, tuple): #it is a feature pattern
-            m, feat, feat_value = Z
-            feat_value = feat_value.replace('"', '\\"')
-            Z = f'{m}[{feat}="{feat_value}"]'
-            if right:
-                pos_feat[(m,feat)] = feat_value
+        right, n = back[n] #right = is n the right son of its father?
+        branch.append((n, right))
+    branch.reverse() #get the branch in correct order
+    return branch
+
+def build_request(T, n, back, request, idx2nkv, args):
+    """
+    build a request correpsonding to a node n
+    within the decision tree T
+    back maps child node to its father
+    request is the base request of the sketch
+    """
+    req = Request(request)  # builds a copy 
+    root2n = branch(n, back) #
+    criterions = [ (idx2nkv[T.feature[n]], r) for n,r in root2n]
+    if args.branch_details:
+        for n,r in criterions:
+            req_c = "pattern" if r else "without"
+            if isinstance(n, tuple):
+                m,feat, value = n
+                req.append(req_c, f'{m}[{feat}="{value}"]')
             else:
-                if (m,feat) not in neg_feat:
-                    neg_feat[(m,feat)] = []
-                neg_feat[(m,feat)].append(Z)
-        else:
-            if right:
-                pos_order.append(Z)
-            else:
-                neg_order.append(Z)
-    if pos_order:
-        req.append("pattern", ";".join(pos_order))
-    if pos_feat:
-        Xf = [f for (m,f) in pos_feat if m == 'X']
-        xf = ",".join( f'''{f}="{pos_feat[('X',f)]}"''' for f in Xf)
-        Yf = [f for (m,f) in pos_feat if m == 'Y']
-        yf = ",".join( f'''{f}="{pos_feat[('Y',f)]}"''' for f in Yf)
-        req.append("pattern", f'X[{xf}];Y[{yf}]')
-    for n in neg_order:
-        req.without(n)
-    good_negatives = [(m,f) for (m,f) in neg_feat if (m,f) not in pos_feat]
-    for n in good_negatives:
-        for c in neg_feat[n]:
-            req.without(c)
+                req.append(req_c,n)
+        return req
+
+    positives = [n for n,r in criterions if r]
+    negatives = [n for n,r in criterions if not r]
+    positive_features = {(t[0],t[1]) : t[2] for t in positives if isinstance(t,tuple)}
+    positive_order = [t for t in positives if isinstance(t, str)]
+    negative_features = [t for t in negatives if isinstance(t,tuple)]
+    #now remove X[Gen=Masc] without {X[Gen=Fem]}
+    good_negatives = [(m,f,v) for (m,f,v) in negative_features if (m,f) not in positive_features]
+    negative_order = [t for t in negatives if isinstance(t, str)]
+
+    if positive_order:
+        req.append("pattern", ";".join(positive_order))
+    nodes = ('X','Y')
+    for n in nodes:
+        nf = {k for (m,k) in positive_features if m==n}
+        if nf:
+            xf = ",".join( f'''{k}="{positive_features[(n,k)]}"''' for k in nf)
+            req.append("pattern", f'{n}[{xf}]')
+    for t in negative_order:
+        req.without(t)
+    for n,k,v in good_negatives:
+        req.without(f'{n}[{k}="{v}"]')
+
     return req
 
-def forbidden_patterns(T, idx2nkv, request, param, y0):
+def forbidden_patterns(T, idx2nkv, request, param, y0, args):
     """
     list patterns reaching prediction y0 within T
     """
@@ -87,10 +102,19 @@ def forbidden_patterns(T, idx2nkv, request, param, y0):
                 n = back[n][1]
             if n and n not in internal_node and T.impurity[ n ] <= param['threshold']:
                 internal_node.add(n)
-                empty_patterns.append( build_request(T, n, back, request, idx2nkv))
+                empty_patterns.append( build_request(T, n, back, request, idx2nkv, args))
     return empty_patterns
 
 def nkv(corpus, skipped_features, max_feature_values=50):
+    """
+    given a corpus, return the dictionnary  nkv_idx
+    mapping triple (n,k,v) to an index 
+    - n in ('X', 'Y', ...)
+    - k in ('Gen', 'upos', ...)
+    - v in ('Fem', 'Det', ...)
+
+    pair_number = corpus.count( "X << Y")
+    """
     observations = dict()
     pair_number = 0
     for sid in corpus:
@@ -113,6 +137,15 @@ def nkv(corpus, skipped_features, max_feature_values=50):
     return nkv_idx, pair_number
 
 def build_Xy(corpus, skipped_features, edge_idx):
+    """
+    prepare data for the decision tree
+    nkv_idx : to each triple (node, feature, value) 
+    X = matrix, for each pair of distinct nodes  (X,Y) in the corpus, 
+    for each triple (n,k,v) in nkv_idx, X[n][nkv] = 1 if node n has feature (k,v)
+
+    y = vector : y[XY] = edge index between X and Y
+    W : a weight on observations, not used
+    """
     print("preprocessing")    
     nkv_idx, XY_number = nkv(corpus, skipped_features)
     X = np.zeros((XY_number, len(nkv_idx)))
@@ -156,7 +189,7 @@ def zero_knowledge_voids(corpus_gold, args, param):
     print("learning")
     clf.fit(X, y, sample_weight=W)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
-    voids = forbidden_patterns(clf.tree_, idx2nkv, Request("X[];Y[];e:X->Y"), param, edge_idx[None])
+    voids = forbidden_patterns(clf.tree_, idx2nkv, Request("X[];Y[];e:X->Y"), param, edge_idx[None], args)
     if args.forbidden:
         f = open(args.forbidden, "w")
         for pattern in voids:
@@ -215,7 +248,7 @@ def zero_knowledge_voids(corpus_gold, args, param):
 
 def parse_request(filename):
     """
-    parsing a (anti-)pattern file 
+    parsing an (anti-)pattern file 
     """
     excluded = []
     current_pattern = None
@@ -238,6 +271,10 @@ def parse_request(filename):
 
 
 def verify(corpus, args):
+    """
+    for requests within args.forbidden, verifies whether we found them
+    in the corpus
+    """
     excluded = parse_request(args.forbidden)
     print("testing patterns")
     found = False
@@ -257,11 +294,12 @@ if __name__ == "__main__":
     parser.add_argument('action', help="action in [learn, verify]")
     parser.add_argument('corpus', help='a conll file')
     parser.add_argument('-f', '--forbidden', default=None, help="filename for the antipatterns")
-    parser.add_argument('-t', '--threshold', default=1e-10, help="minimal threshold to consider a node as pure")
+    parser.add_argument('-t', '--threshold', default=1e-10, type=float, help="minimal threshold to consider a node as pure")
     parser.add_argument('-s','--nodetails',action="store_true", help="simplifies edges: replace comp:obl by comp")
     parser.add_argument('-w', '--web', action="store_true", help="for a debugging session")
     parser.add_argument('-d', '--depth', default=8, help="depth of the binary decision tree")
     parser.add_argument('-e', action="store_true", help="will learn patterns ensuring there is no edge X-[e]->Y, with e=(subj,det,...)")
+    parser.add_argument('-b', '--branch_details', action="store_true", help="if set, requests are fully decomposed")   
     args = parser.parse_args()
     set_config("sud")
     param = {
