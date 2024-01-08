@@ -44,12 +44,23 @@ def branch(n, back):
     branch.reverse() #get the branch in correct order
     return branch
 
+def append_nkv(n, req, with_or_without):
+    """
+    append an nkv to req, with_or_with = "pattern" or "without"
+    """
+    if isinstance(n, tuple):
+        m,feat, value = n
+        req.append(with_or_without, f'{m}[{feat}="{value}"]')
+    else:
+        req.append(with_or_without,n)
+
 def build_request(T, n, back, request, idx2nkv, args):
     """
     build a request correpsonding to a node n
     within the decision tree T
     back maps child node to its father
     request is the base request of the sketch
+    if args.branch_details, we do not simplify the request
     """
     req = Request(request)  # builds a copy 
     root2n = branch(n, back) #
@@ -57,21 +68,17 @@ def build_request(T, n, back, request, idx2nkv, args):
     if args.branch_details:
         for n,r in criterions:
             req_c = "pattern" if r else "without"
-            if isinstance(n, tuple):
-                m,feat, value = n
-                req.append(req_c, f'{m}[{feat}="{value}"]')
-            else:
-                req.append(req_c,n)
+            append_nkv(n, req, req_c)
         return req
 
     positives = [n for n,r in criterions if r]
     negatives = [n for n,r in criterions if not r]
-    positive_features = {(t[0],t[1]) : t[2] for t in positives if isinstance(t,tuple)}
-    positive_order = [t for t in positives if isinstance(t, str)]
-    negative_features = [t for t in negatives if isinstance(t,tuple)]
+    positive_features = {(nkv[0],nkv[1]) : nkv[2] for nkv in positives if isinstance(nkv,tuple)}
+    positive_order = [nkv for nkv in positives if isinstance(nkv, str)]
+    negative_features = [nkv for nkv in negatives if isinstance(nkv,tuple)]
     #now remove X[Gen=Masc] without {X[Gen=Fem]}
     good_negatives = [(m,f,v) for (m,f,v) in negative_features if (m,f) not in positive_features]
-    negative_order = [t for t in negatives if isinstance(t, str)]
+    negative_order = [nkv for nkv in negatives if isinstance(nkv, str)]
 
     if positive_order:
         req.append("pattern", ";".join(positive_order))
@@ -108,10 +115,13 @@ def forbidden_patterns(T, idx2nkv, request, param, y0, args):
 def nkv(corpus, skipped_features, max_feature_values=50):
     """
     given a corpus, return the dictionnary  nkv_idx
-    mapping triple (n,k,v) to an index 
+    an nkv to an index
+    an nkv is either 
+    a triple (n,k,v)
     - n in ('X', 'Y', ...)
     - k in ('Gen', 'upos', ...)
     - v in ('Fem', 'Det', ...)
+    or nkv is an order constraint: nkv = "X << Y"
 
     pair_number = corpus.count( "X << Y")
     """
@@ -141,9 +151,9 @@ def build_Xy(corpus, skipped_features, edge_idx):
     prepare data for the decision tree
     nkv_idx : to each triple (node, feature, value) 
     X = matrix, for each pair of distinct nodes  (X,Y) in the corpus, 
-    for each triple (n,k,v) in nkv_idx, X[n][nkv] = 1 if node n has feature (k,v)
+    for each triple (n,k,v) in nkv_idx, X[nkv] = 1 if node n has feature (k,v)
 
-    y = vector : y[XY] = edge index between X and Y
+    y = vector : y[X -> Y] = edge index between X and Y, None if there is no such edge
     W : a weight on observations, not used
     """
     print("preprocessing")    
