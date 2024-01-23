@@ -31,7 +31,9 @@ def pid_exist(pid):
 def init():
     global port, remote_ip, caml_pid
     grewpy = "grewpy_backend"
-    if not pid_exist(caml_pid):
+    if pid_exist(caml_pid):
+        print ("grewpy_backend already started", file=sys.stderr)
+    else:
         python_pid = os.getpid()
         caml = Popen(
             [grewpy, "--caller", str(python_pid)],
@@ -51,14 +53,14 @@ def init():
             exit (1)
 
 def connect():
+    global caml_pid
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((remote_ip, port))
         return s
     except socket.error:
-        raise GrewError('Failed to create socket. Make sure that you have called grew.init.')
-    except socket.gaierror:
-        print('[GREW] Hostname could not be resolved. Sorry\n', file=sys.stderr)
+        caml_pid = None
+        raise GrewError('Failed to create socket. grewpy_backend seems down. Run grew.init() to restart.')
 
 
 packet_size=32768
