@@ -11,9 +11,10 @@ import sys
 from .grew import GrewError
 
 host = 'localhost'
-port = 8888
+port = None
 remote_ip = ''
 caml_pid = None
+minimal_grewpy_backend_version = "0.5.3"
 
 request_counter = 0 #number of request to caml
 
@@ -45,6 +46,7 @@ def init():
         #wait for grew's lib answer
         time.sleep(0.1)
         if caml.poll() == None:
+            check_version()
             print ("connected to port: " + str(port), file=sys.stderr)
             remote_ip = socket.gethostbyname(host)
             return (caml)
@@ -102,3 +104,23 @@ def send_and_receive(msg):
     except AttributeError as e: # connect issue
         raise GrewError({"function": msg["command"], "message" : e.value})
 
+# Source: https://www.tutorialspoint.com/compare-version-numbers-in-python
+def compareVersion(version1, version2):
+   versions1 = [int(v) for v in version1.split(".")]
+   versions2 = [int(v) for v in version2.split(".")]
+   for i in range(max(len(versions1),len(versions2))):
+      v1 = versions1[i] if i < len(versions1) else 0
+      v2 = versions2[i] if i < len(versions2) else 0
+      if v1 > v2:
+         return 1
+      elif v1 < v2:
+         return -1
+   return 0
+
+def check_version():
+    req = { "command": "get_version" }
+    current_version = send_and_receive(req)
+    if compareVersion (current_version, minimal_grewpy_backend_version) < 0:
+        print (f"Incompatible grewpy_backend version.", file=sys.stderr)
+        print (f"You have version {current_version}, but it should be {minimal_grewpy_backend_version} or higher", file=sys.stderr)
+        print (f"Please upgrade grewpy_backend (see https://grew.fr/usage/python#upgrade)", file=sys.stderr)
