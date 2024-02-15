@@ -194,7 +194,7 @@ class Corpus(AbstractCorpus):
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_parameter=[], clustering_keys=[],flat=None,deco=False):
+    def search(self, request, clustering_parameter=[], clustering_keys=[], flat=None, deco=False, bound=None, timeout=None):
         """
         Search for [request] into [corpus_index]
 
@@ -210,7 +210,9 @@ class Corpus(AbstractCorpus):
             "corpus_index": self._id,
             "request": request.json_data(),
             "clustering_keys": clustering_parameter + clustering_keys,
-            "build_deco": deco
+            "build_deco": deco,
+            "bound": bound,
+            "timeout": timeout,
         })
         if flat == "matchings":
             return Matchings(res, self)
