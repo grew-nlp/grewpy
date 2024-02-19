@@ -16,6 +16,7 @@ from .network import send_and_receive
 from .graph import Graph
 from .grew import GrewError
 from .observation import Observation
+
 from . import network
 
 from .matchings import Matchings
@@ -254,3 +255,9 @@ class Corpus(AbstractCorpus):
             "corpus_index": self._id
         })
         return reply
+
+    def run(self, Grs, strat="main"):
+        return Grs.run(self, strat)
+
+    def apply(self, Grs, strat="main"):
+        return Grs.apply(self, strat)
