@@ -339,7 +339,26 @@ class GRSDraft(Package):
     def save(self, filename):
         with open(filename, "w") as f:
             f.write(str(self))
-      
+
+def constant_UD2bUD(cls):
+    cls.UD2BUD = cls("""
+package UD2bUD {
+  rule enh { % remove enhanced relations
+    pattern { e:N -[enhanced=yes]-> M }
+    commands { del_edge e}
+  }
+
+  rule empty { % remove empty nodes
+    pattern { N [wordform=__EMPTY__, textform=_] }
+    commands { del_node N }
+  }
+}
+
+strat main { Onf(UD2bUD) }
+""")
+    return cls
+
+@constant_UD2bUD
 class GRS:
     """
     An abstract GRS. Offers the possibility to apply rewriting.
