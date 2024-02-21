@@ -341,7 +341,7 @@ class GRSDraft(Package):
             f.write(str(self))
 
 def constant_UD2bUD(cls):
-    cls.UD2BUD = cls("""
+    cls.UD2bUD = cls("""
 package UD2bUD {
   rule enh { % remove enhanced relations
     pattern { e:N -[enhanced=yes]-> M }
