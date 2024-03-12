@@ -1,9 +1,10 @@
-from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier, export_graphviz
 import numpy as np
 import argparse
 import logging
+import itertools
 
-from classifier import back_tree, e_index
+from classifier import back_tree, e_index, branch
 # Use local grew lib
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
@@ -18,7 +19,7 @@ def body(line): #get the body of a request"""
 
 def clear_but_working(g):
     """
-    delete non working edges within g
+    delete edges within g
     """
     g.sucs = {n : [] for n in g.sucs}
     return (g)
@@ -33,23 +34,12 @@ def basic_edges(g):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
-def branch(n, back):
-    """
-    compute the branch from root node 0 to n
-    """
-    branch = []
-    while n != 0: #0 is the root node
-        right, n = back[n] #right = is n the right son of its father?
-        branch.append((n, right))
-    branch.reverse() #get the branch in correct order
-    return branch
-
 def append_nkv(n, req, with_or_without):
     """
     append an nkv to req, with_or_with = "pattern" or "without"
     """
     if isinstance(n, tuple):
-        m,feat, value = n
+        m,(feat, value) = n
         req.append(with_or_without, f'{m}[{feat}="{value}"]')
     else:
         req.append(with_or_without,n)
@@ -73,11 +63,11 @@ def build_request(T, n, back, request, idx2nkv, args):
 
     positives = [n for n,r in criterions if r]
     negatives = [n for n,r in criterions if not r]
-    positive_features = {(nkv[0],nkv[1]) : nkv[2] for nkv in positives if isinstance(nkv,tuple)}
+    positive_features = {(nkv[0],nkv[1][0]) : nkv[1][1] for nkv in positives if isinstance(nkv,tuple)}
     positive_order = [nkv for nkv in positives if isinstance(nkv, str)]
     negative_features = [nkv for nkv in negatives if isinstance(nkv,tuple)]
     #now remove X[Gen=Masc] without {X[Gen=Fem]}
-    good_negatives = [(m,f,v) for (m,f,v) in negative_features if (m,f) not in positive_features]
+    good_negatives = [(m,(f,v)) for (m,(f,v)) in negative_features if (m,f) not in positive_features]
     negative_order = [nkv for nkv in negatives if isinstance(nkv, str)]
 
     if positive_order:
@@ -90,12 +80,11 @@ def build_request(T, n, back, request, idx2nkv, args):
             req.append("pattern", f'{n}[{xf}]')
     for t in negative_order:
         req.without(t)
-    for n,k,v in good_negatives:
+    for n,(k,v) in good_negatives:
         req.without(f'{n}[{k}="{v}"]')
-
     return req
 
-def forbidden_patterns(T, idx2nkv, request, param, y0, args):
+def patterns_leaves(T, idx2nkv, request, param, y0, args):
     """
     list patterns reaching prediction y0 within T
     """
@@ -112,9 +101,9 @@ def forbidden_patterns(T, idx2nkv, request, param, y0, args):
                 empty_patterns.append( build_request(T, n, back, request, idx2nkv, args))
     return empty_patterns
 
-def nkv(corpus, skipped_features, max_feature_values=50):
+def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     """
-    given a corpus, return the dictionnary  nkv_idx
+    given a corpus, return the dictionnary  nkv_idx -> index 
     an nkv to an index
     an nkv is either 
     a triple (n,k,v)
@@ -122,16 +111,15 @@ def nkv(corpus, skipped_features, max_feature_values=50):
     - k in ('Gen', 'upos', ...)
     - v in ('Fem', 'Det', ...)
     or nkv is an order constraint: nkv = "X << Y"
-
+    for each nk, we keep only max_feature_values 
+    pattern_nodes = (X, Y, ...) list of nodes
     pair_number = corpus.count( "X << Y")
     """
-    observations = dict()
+    observations = dict() #maps an nk => v => nb of occurrences
     pair_number = 0
-    for sid in corpus:
-        graph = corpus[sid]
+    for graph in corpus.values():
         pair_number += len(graph)**2 - len(graph)
-        for n in graph:
-            N = graph[n]  # feature structure of N
+        for N in graph.features.values():
             for k, v in N.items():
                 if k not in skipped_features:
                     if k not in observations:
@@ -139,121 +127,120 @@ def nkv(corpus, skipped_features, max_feature_values=50):
                     observations[k][v] = observations[k].get(v, 0)+1
     ccc =  set()
     for k in observations:
-        T = sorted([(n,v) for v,n in observations[k].items()], reverse=True)
-        for n,v in T[:max_feature_values]:
+        T = sorted([(occurrences,v) for v, occurrences in observations[k].items()], reverse=True)
+        for _,v in T[:max_feature_values]:
             ccc.add((k,v))
-    nkv = {('X',)+k for k in ccc} | {('Y',)+k for k in ccc} | {'X<Y', 'X>Y', 'X<<Y'}
+    nkv = itertools.product(pattern_nodes, ccc)
+    nkv = set(nkv) |  {'X<Y', 'X>Y', 'X<<Y'}
     nkv_idx = e_index(nkv)
     return nkv_idx, pair_number
 
-def build_Xy(corpus, skipped_features, edge_idx):
+def edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy):
+    for k,v in graph[Xn].items():
+        if ('X',(k,v)) in nkv_idx: X[(cpt,nkv_idx[('X',(k,v))])] += 1    
+    for k,v in graph[Yn].items():
+        if ('Y',(k,v)) in nkv_idx: X[(cpt,nkv_idx[('Y',(k,v))])] += 1
+    px, py = int(Xn), int(Yn)
+    X[(cpt,xpy)]  = 1 if ((px - py) == -1) else 0
+    X[(cpt,xby)] = 1 if ((px - py) < 0) else 0
+    X[(cpt,xgy)]  = 1 if ((px - py) == 1) else 0
+    e = graph.edge(Xn,Yn)
+    y[cpt] = edge_idx[e]
+    return cpt+1
+
+def build_Xy(gold, corpus, edge_idx, nkv_idx, sample_size, full=True):
     """
     prepare data for the decision tree
+    corpus: from which patterns are extracted
+    edge_idx: index for each edge label 
     nkv_idx : to each triple (node, feature, value) 
+    sample_size: size of the output
+    full: True if we have to cover all samples in the corpus, otherwise, the ratio 
+
+    Return 
     X = matrix, for each pair of distinct nodes  (X,Y) in the corpus, 
     for each triple (n,k,v) in nkv_idx, X[nkv] = 1 if node n has feature (k,v)
-
     y = vector : y[X -> Y] = edge index between X and Y, None if there is no such edge
-    W : a weight on observations, not used
     """
-    print("preprocessing")    
-    nkv_idx, XY_number = nkv(corpus, skipped_features)
-    X = np.zeros((XY_number, len(nkv_idx)))
-    y = np.zeros(XY_number)
-    W = np.ones(XY_number)
-
+    xpy, xgy, xby = nkv_idx['X<Y'], nkv_idx['X>Y'], nkv_idx['X<<Y']
     cpt = 0
-    for sid in corpus:
-        graph = corpus[sid]
-        for Xn in graph:
-            for Yn in graph:
-                if Xn != Yn:
-                    for k,v in graph[Xn].items():
-                        if ('X',k,v) in nkv_idx:
-                            X[(cpt,nkv_idx[('X',k,v)])] += 1
-                    for k,v in graph[Yn].items():
-                        if ('Y',k,v) in nkv_idx:
-                            X[(cpt,nkv_idx[('Y',k,v)])] += 1
-                    px = int(Xn)
-                    py = int(Yn)
-                    X[(cpt,nkv_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
-                    X[(cpt,nkv_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
-                    X[(cpt,nkv_idx['X>Y'])]  = 1 if ((px - py) == 1) else 0
-                    e = graph.edge(Xn,Yn)
-                    W[cpt] = 1 if e else 1
-                    y[cpt] = edge_idx[e]
-                    cpt += 1
-    return X,y,W, nkv_idx
-    
+    if full is True:    
+        X = np.zeros((sample_size, len(nkv_idx)))
+        y = np.zeros(sample_size)
+        for graph in corpus.values():
+            for Xn,Yn in itertools.permutations(graph, 2):
+                cpt = edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
+        return X,y
+    dependencies = gold.search(Request("X[];Y[];e:X->Y"), ["e.label"])
+    samples_nb = sum([len(v) for v in dependencies])
+    X = np.zeros((int(samples_nb/full), len(nkv_idx)))
+    y = np.zeros(int(samples_nb/full))    
+    for dep, matchings in dependencies.items():
+        for match in  matchings:
+            Xn, Yn = [int(match['matching']['nodes'][N]) for N in ('X','Y')]
+            cpt = edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
+
+def check(corpus, excluded, edge):
+    """
+    return true if no pattern within excluded has an edge 
+    """
+    found = False
+    for request in excluded:
+        if edge: request = request.without(f'X-["{edge}"]->Y') 
+        else: request.append("pattern", "e:X->Y")
+        lines = corpus.search(request)
+        if lines:
+            found = True
+            print(f"forbidden pattern\n{request}\n")
+            print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}\n""")
+    return not found
+
+def fit_dependency(clf,X,y,edge_idx,args):
+    print("learning")
+    if args.dependency:
+        edg = Fs_edge(args.dependency)
+        if edg not in edge_idx:
+            print(f"Issue: {args.dependency} is not a dependency of the corpus (e.g. subj)")
+            sys.exit(2)
+        else:
+            y = (y == edge_idx[edg])
+    else:
+        y = (y == edge_idx[None])
+    clf.fit(X, y)
+
+   
 def zero_knowledge_voids(corpus_gold, args, param):
     draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
-    edges = {Fs_edge(x) : 1 for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None : 1.1}
+    edges = {Fs_edge(x) for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None}
     edge_idx = e_index(edges)
-
-    X,y,W,nkv_idx = build_Xy(draft, skipped_features, edge_idx)
+    print("preprocessing")    
+    nkv_idx, XY_number = nkv(draft, skipped_features, ('X','Y'))
+    idx2nkv = {v:k for k,v in nkv_idx.items()}
+    X,y = build_Xy(corpus_gold,draft, edge_idx, nkv_idx, XY_number, True)
     clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
-                                 max_depth=args.depth,
-                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
-    print("learning")
-    clf.fit(X, y, sample_weight=W)
-    idx2nkv = {v:k for k,v in nkv_idx.items()}
-    voids = forbidden_patterns(clf.tree_, idx2nkv, Request("X[];Y[];e:X->Y"), param, edge_idx[None], args)
-    if args.forbidden:
-        f = open(args.forbidden, "w")
-        for pattern in voids:
-            f.write(f"%%%\n{str(pattern)}\n")
-        f.close()
-    print("testing patterns")
-    found = False
-    for request in voids:
-        lines = corpus_gold.search(request)
-        if lines:
-            print(f"forbidden pattern\n{request}\n")
-            print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}
-""")
-            found = True
-    if not found:
+                                 max_depth=args.depth)
+    fit_dependency(clf, X, y, edge_idx, args)
+    if args.export_tree:
+        export_graphviz(clf, out_file=args.export_tree, 
+                        feature_names=[str(idx2nkv[i]) for i in range(len(idx2nkv))])
+    
+    requests = patterns_leaves(clf.tree_, idx2nkv, Request("X[];Y[]"), param, 1, args)
+    if args.file:
+        with open(args.file, "w") as f:
+            for pattern in requests:
+                f.write(f"%%%\n{str(pattern)}\n")
+    print("testing patterns")            
+    if check(corpus_gold, requests, args.dependency):
         print("self verification: no forbidden patterns found")
     if args.web:
-        empty_rules = [ Rule( request, Commands()) for request in voids]
+        empty_rules = [ Rule( request, Commands()) for request in requests]
         empty_rules = { f"rule{i}" : empty_rules[i] for i in range(len(empty_rules))} #give a name
         web = grew_web.Grew_web()
         print(f"go to {web.url()}")
         web.load_corpus(corpus_gold)
         web.load_grs(GRS(empty_rules))
-    if args.e:
-        none_idx = edge_idx[None]
-        if args.forbidden:
-            f = open(args.forbidden, "+a")
-
-        for e in edges:
-            idx = edge_idx[e]
-            if idx != none_idx:
-                y0 = np.where(y == idx, 0, 1)
-                clf = DecisionTreeClassifier(criterion="gini", 
-                                 min_samples_leaf=param["min_samples_leaf"], 
-                                 max_depth=args.depth,
-                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
-                print("learning")
-                clf.fit(X, y0, sample_weight=W)
-                voids = forbidden_patterns(clf.tree_, idx2nkv, Request(f"X[];Y[];e:X-[{str(e)}]->Y"), param,1)
-                if args.forbidden:                  
-                    for pattern in voids:
-                        f.write(f"%%%\n{str(pattern)}\n")
-                print("testing patterns")
-                found = False
-                for request in voids:
-                    lines = corpus_gold.search(request)
-                    if lines:
-                        print(f"forbidden pattern\n{request}\n")
-                        print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}
-""")
-                        found = True
-        if args.forbidden:
-            f.close()
-
 
 
 def parse_request(filename):
@@ -282,20 +269,12 @@ def parse_request(filename):
 
 def verify(corpus, args):
     """
-    for requests within args.forbidden, verifies whether we found them
+    for requests within args.file, verifies whether we found them
     in the corpus
     """
-    excluded = parse_request(args.forbidden)
+    excluded = parse_request(args.file)
     print("testing patterns")
-    found = False
-    for req in excluded:
-        lines = corpus.search(req)
-        if lines:
-            found = True
-            print(f"found forbidden pattern\n{req}")
-            print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}
-""")
-    if not found:
+    if check(corpus,excluded):
         print("nothing found")
 
 if __name__ == "__main__":
@@ -303,13 +282,14 @@ if __name__ == "__main__":
                                      description='Learn/Test antipattern on a corpus')
     parser.add_argument('action', help="action in [learn, verify]")
     parser.add_argument('corpus', help='a conll file')
-    parser.add_argument('-f', '--forbidden', default=None, help="filename for the antipatterns")
+    parser.add_argument('-f', '--file', default=None, help="filename for the patterns")
     parser.add_argument('-t', '--threshold', default=1e-10, type=float, help="minimal threshold to consider a node as pure")
     parser.add_argument('-s','--nodetails',action="store_true", help="simplifies edges: replace comp:obl by comp")
     parser.add_argument('-w', '--web', action="store_true", help="for a debugging session")
     parser.add_argument('-d', '--depth', default=8, help="depth of the binary decision tree")
-    parser.add_argument('-e', action="store_true", help="will learn patterns ensuring there is no edge X-[e]->Y, with e=(subj,det,...)")
     parser.add_argument('-b', '--branch_details', action="store_true", help="if set, requests are fully decomposed")   
+    parser.add_argument('--export_tree', default='', help='export classifier tree as a dot file')
+    parser.add_argument('--dependency', default='', help='export classifier tree as a dot file')
     args = parser.parse_args()
     set_config("sud")
     param = {

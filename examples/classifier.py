@@ -14,18 +14,32 @@ from grewpy import Corpus, GRS, set_config
 from grewpy import Request, Rule, Commands, Add_edge, GRSDraft, CorpusDraft
 
 def back_tree(T):
+    """
+    Given a classifier tree T, builds the parent relation: Y |-> (i,X) for 
+    if Y is the i-th son of X in T
+    returns also the set of leaves of T
+    """
     back = dict()
     leaves = set()
     for node in range(T.node_count):
         g = T.children_left[node]
         d = T.children_right[node]
-        if g >=0:
-            back[g] = (0,node)
-        if d >= 0:
-            back[d] = (1, node)
-        if g == -1:
-            leaves.add(node)
+        if g >= 0: back[g] = (0, node)
+        if d >= 0: back[d] = (1, node)
+        if g == -1: leaves.add(node)
     return back, leaves
+
+def branch(n, back):
+    """
+    starting from n, compute the branch from root node 0 to n
+    by means of the back relation
+    """
+    branch = []
+    while n != 0: #0 is the root node
+        right, n = back[n] #right = is n the right son of its father?
+        branch.append((n, right))
+    branch.reverse() #get the branch in correct order
+    return branch
 
 
 def feature_values_for_decision(matchings, corpus, param, nodes):
@@ -226,5 +240,7 @@ class Classifier():
         acc = dict()
         clf.branches(0, tuple(), acc, param["node_impurity"])
         return acc
+    
+    
 
 
