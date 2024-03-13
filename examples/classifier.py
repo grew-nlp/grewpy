@@ -20,14 +20,12 @@ def back_tree(T):
     returns also the set of leaves of T
     """
     back = dict()
-    leaves = set()
     for node in range(T.node_count):
         g = T.children_left[node]
         d = T.children_right[node]
         if g >= 0: back[g] = (0, node)
         if d >= 0: back[d] = (1, node)
-        if g == -1: leaves.add(node)
-    return back, leaves
+    return back
 
 def branch(n, back):
     """
@@ -41,7 +39,15 @@ def branch(n, back):
     branch.reverse() #get the branch in correct order
     return branch
 
+def e_index(d):
+    """
+    given a collection d, maps an index to each element in d
+    """
+    cpt = iter(range(10000000))
+    return {e : next(cpt) for e in d}
 
+
+'''
 def feature_values_for_decision(matchings, corpus, param, nodes):
     """
     restrict feature values to those useful for a decision tree
@@ -72,12 +78,6 @@ def feature_values_for_decision(matchings, corpus, param, nodes):
                 features[(n,k,v)] = observation[(n,k)][v]
     return features
 
-def e_index(d):
-    """
-    given a collection d, maps an index to each element in d
-    """
-    cpt = iter(range(10000000))
-    return {e : next(cpt) for e in d}
 
 def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, param, internal_node):
     while n and back[n][1] and T.impurity[back[n][1]] < param['node_impurity']:
@@ -244,3 +244,4 @@ class Classifier():
     
 
 
+'''

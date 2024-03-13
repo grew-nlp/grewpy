@@ -14,6 +14,7 @@ from grewpy import Corpus, GRS, set_config
 from grewpy import grew_web
 from grewpy.graph import Fs_edge
 
+
 def body(line): #get the body of a request"""
     return line[line.index('{')+1:].strip().strip('}')
 
@@ -44,9 +45,9 @@ def append_nkv(n, req, with_or_without):
     else:
         req.append(with_or_without,n)
 
-def build_request(T, n, back, request, idx2nkv, args):
+def build_request(T, n, back, request_nodes, request, idx2nkv, args):
     """
-    build a request correpsonding to a node n
+    build a request corresponding to a node n
     within the decision tree T
     back maps child node to its father
     request is the base request of the sketch
@@ -72,8 +73,7 @@ def build_request(T, n, back, request, idx2nkv, args):
 
     if positive_order:
         req.append("pattern", ";".join(positive_order))
-    nodes = ('X','Y')
-    for n in nodes:
+    for n in request_nodes:
         nf = {k for (m,k) in positive_features if m==n}
         if nf:
             xf = ",".join( f'''{k}="{positive_features[(n,k)]}"''' for k in nf)
@@ -84,23 +84,19 @@ def build_request(T, n, back, request, idx2nkv, args):
         req.without(f'{n}[{k}="{v}"]')
     return req
 
-def patterns_leaves(T, idx2nkv, request, param, y0, args):
+def patterns(T, idx2nkv, request, nodes, param, y0, args):
     """
     list patterns reaching prediction y0 within T
     """
-    back, leaves = back_tree(T)
-    internal_node = set()
-    empty_patterns = []
-    for n in leaves:
-        if np.argmax(T.value[n]) == y0: #y0 is majority
-            while n and back[n][1] and T.impurity[ back[n][1] ] <= param['threshold']:
-                #most general unifier
-                n = back[n][1]
-            if n and n not in internal_node and T.impurity[ n ] <= param['threshold']:
-                internal_node.add(n)
-                empty_patterns.append( build_request(T, n, back, request, idx2nkv, args))
-    return empty_patterns
-
+    def loop(n): #list of nodes corresponding to outcome y0
+        if np.argmax(T.value[n]) == y0 and T.impurity[n] < param['threshold']: return [n]
+        if T.children_left[n] < 0: return [] #no children
+        g = T.children_left[n]
+        d = T.children_right[n]
+        return loop(g) + loop(d)
+    back = back_tree(T)
+    return [build_request(T, n, back,  nodes, request, idx2nkv, args) for n in loop(0)]
+    
 def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     """
     given a corpus, return the dictionnary  nkv_idx -> index 
@@ -135,16 +131,15 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     nkv_idx = e_index(nkv)
     return nkv_idx, pair_number
 
-def edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy):
-    for k,v in graph[Xn].items():
-        if ('X',(k,v)) in nkv_idx: X[(cpt,nkv_idx[('X',(k,v))])] += 1    
-    for k,v in graph[Yn].items():
-        if ('Y',(k,v)) in nkv_idx: X[(cpt,nkv_idx[('Y',(k,v))])] += 1
-    px, py = int(Xn), int(Yn)
+def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy):
+    for Xid, Xname in X2Name:
+        for k,v in graph[Xid].items():
+            if (Xname,(k,v)) in nkv_idx: X[(cpt,nkv_idx[(Xname,(k,v))])] += 1    
+    px, py = int(X2Name[0][0]), int(X2Name[1][0])
     X[(cpt,xpy)]  = 1 if ((px - py) == -1) else 0
     X[(cpt,xby)] = 1 if ((px - py) < 0) else 0
     X[(cpt,xgy)]  = 1 if ((px - py) == 1) else 0
-    e = graph.edge(Xn,Yn)
+    e = graph.edge(X2Name[0][0], X2Name[1][0])
     y[cpt] = edge_idx[e]
     return cpt+1
 
@@ -169,16 +164,8 @@ def build_Xy(gold, corpus, edge_idx, nkv_idx, sample_size, full=True):
         y = np.zeros(sample_size)
         for graph in corpus.values():
             for Xn,Yn in itertools.permutations(graph, 2):
-                cpt = edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
+                cpt = edge_XY(graph, ((Xn,'X'),(Yn,'Y')), cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
         return X,y
-    dependencies = gold.search(Request("X[];Y[];e:X->Y"), ["e.label"])
-    samples_nb = sum([len(v) for v in dependencies])
-    X = np.zeros((int(samples_nb/full), len(nkv_idx)))
-    y = np.zeros(int(samples_nb/full))    
-    for dep, matchings in dependencies.items():
-        for match in  matchings:
-            Xn, Yn = [int(match['matching']['nodes'][N]) for N in ('X','Y')]
-            cpt = edge_XY(graph, Xn,Yn, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
 
 def check(corpus, excluded, edge):
     """
@@ -186,8 +173,7 @@ def check(corpus, excluded, edge):
     """
     found = False
     for request in excluded:
-        if edge: request = request.without(f'X-["{edge}"]->Y') 
-        else: request.append("pattern", "e:X->Y")
+        request = request.without(f'X-["{edge}"]->Y') if edge else request.with_(f'X-["{edge}"]->Y')
         lines = corpus.search(request)
         if lines:
             found = True
@@ -202,20 +188,20 @@ def fit_dependency(clf,X,y,edge_idx,args):
         if edg not in edge_idx:
             print(f"Issue: {args.dependency} is not a dependency of the corpus (e.g. subj)")
             sys.exit(2)
-        else:
-            y = (y == edge_idx[edg])
+        else: y = (y == edge_idx[edg])
     else:
         y = (y == edge_idx[None])
     clf.fit(X, y)
 
    
-def zero_knowledge_voids(corpus_gold, args, param):
+def zero_knowledge(corpus_gold, args, request, param):
     draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
-    edges = {Fs_edge(x) for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None}
+    edges = {Fs_edge(x) for x in corpus_gold.count(Request(request, "e:X->Y"), ["e.label"]).keys()} | {None}
     edge_idx = e_index(edges)
-    print("preprocessing")    
-    nkv_idx, XY_number = nkv(draft, skipped_features, ('X','Y'))
+    print("preprocessing")
+    nodes = request.free_variables()["nodes"]  #free nodes = 'X', 'Y' in the request
+    nkv_idx, XY_number = nkv(draft, skipped_features, nodes)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     X,y = build_Xy(corpus_gold,draft, edge_idx, nkv_idx, XY_number, True)
     clf = DecisionTreeClassifier(criterion="entropy", 
@@ -226,7 +212,7 @@ def zero_knowledge_voids(corpus_gold, args, param):
         export_graphviz(clf, out_file=args.export_tree, 
                         feature_names=[str(idx2nkv[i]) for i in range(len(idx2nkv))])
     
-    requests = patterns_leaves(clf.tree_, idx2nkv, Request("X[];Y[]"), param, 1, args)
+    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1, args) #1=good outcome
     if args.file:
         with open(args.file, "w") as f:
             for pattern in requests:
@@ -303,7 +289,7 @@ if __name__ == "__main__":
     if args.nodetails:
         corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     if args.action == 'learn':
-        zero_knowledge_voids(corpus_gold, args, param)
+        zero_knowledge(corpus_gold, args, Request('X[];Y[]'), param)
     elif args.action == 'verify':
         verify(corpus_gold, args)
     else:
