@@ -29,21 +29,17 @@ def basic_edges(g):
     """
     change edges {1:comp, 2:obl} to {1:comp}
     """
-    def remove(e):
-        return Fs_edge({'1': e['1']})
     for n in g.sucs:
-        g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
+        g.sucs[n] = [(m,  Fs_edge({'1': e['1']}) ) for m, e in g.sucs[n] ]
     return g
 
-def append_nkv(n, req, with_or_without):
+def nkv2req(n):
     """
-    append an nkv to req, with_or_with = "pattern" or "without"
+    transform an nkv to a request constraints
     """
-    if isinstance(n, tuple):
-        m,(feat, value) = n
-        req.append(with_or_without, f'{m}[{feat}="{value}"]')
-    else:
-        req.append(with_or_without,n)
+    if isinstance(n,str): return n #it is an order constraints
+    m,(feat, value) = n #it is a feature constraints
+    return f'{m}[{feat}="{value}"]'
 
 def build_request(T, n, back, request_nodes, request, idx2nkv, args):
     """
@@ -58,13 +54,13 @@ def build_request(T, n, back, request_nodes, request, idx2nkv, args):
     criterions = [ (idx2nkv[T.feature[n]], r) for n,r in root2n]
     if args.branch_details:
         for n,r in criterions:
-            req_c = "pattern" if r else "without"
-            append_nkv(n, req, req_c)
+            if r: req.with_(nkv2req(n))
+            else: req.without(nkv2req(n))
         return req
 
     positives = [n for n,r in criterions if r]
     negatives = [n for n,r in criterions if not r]
-    positive_features = {(nkv[0],nkv[1][0]) : nkv[1][1] for nkv in positives if isinstance(nkv,tuple)}
+    positive_features = {(n,f) : v for (n,(f,v)) in positives if isinstance(nkv,tuple)}
     positive_order = [nkv for nkv in positives if isinstance(nkv, str)]
     negative_features = [nkv for nkv in negatives if isinstance(nkv,tuple)]
     #now remove X[Gen=Masc] without {X[Gen=Fem]}
@@ -86,7 +82,7 @@ def build_request(T, n, back, request_nodes, request, idx2nkv, args):
 
 def patterns(T, idx2nkv, request, nodes, param, y0, args):
     """
-    list patterns reaching prediction y0 within T
+    list of patterns reaching prediction y0 within T
     """
     def loop(n): #list of nodes corresponding to outcome y0
         if np.argmax(T.value[n]) == y0 and T.impurity[n] < param['threshold']: return [n]
@@ -96,7 +92,16 @@ def patterns(T, idx2nkv, request, nodes, param, y0, args):
         return loop(g) + loop(d)
     back = back_tree(T)
     return [build_request(T, n, back,  nodes, request, idx2nkv, args) for n in loop(0)]
-    
+
+def order_constraints(nodes):
+    """
+    list all order constraints contained within nodes = X, Y, Z
+    e.g. X<Y, Y<X,X<<Y
+    """
+    S1 = {f"{p}<{q}"  for p,q in itertools.permutations(nodes,2)}
+    S2 = {f"{p}<<{q}" for p,q in itertools.permutations(nodes,2) if p < q}
+    return S1 | S2
+
 def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     """
     given a corpus, return the dictionnary  nkv_idx -> index 
@@ -124,26 +129,26 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     ccc =  set()
     for k in observations:
         T = sorted([(occurrences,v) for v, occurrences in observations[k].items()], reverse=True)
-        for _,v in T[:max_feature_values]:
-            ccc.add((k,v))
+        ccc |= {(k,v) for _,v in  T[:max_feature_values]}
     nkv = itertools.product(pattern_nodes, ccc)
-    nkv = set(nkv) |  {'X<Y', 'X>Y', 'X<<Y'}
+    nkv = set(nkv) | order_constraints(pattern_nodes)
     nkv_idx = e_index(nkv)
-    return nkv_idx, pair_number
+    order_idx = {k : v for k,v in nkv_idx.items() if isinstance(k,str)} #list of order constraints 
+    return nkv_idx, order_idx, pair_number
 
-def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy):
+def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
     for Xid, Xname in X2Name:
         for k,v in graph[Xid].items():
             if (Xname,(k,v)) in nkv_idx: X[(cpt,nkv_idx[(Xname,(k,v))])] += 1    
     px, py = int(X2Name[0][0]), int(X2Name[1][0])
-    X[(cpt,xpy)]  = 1 if ((px - py) == -1) else 0
-    X[(cpt,xby)] = 1 if ((px - py) < 0) else 0
-    X[(cpt,xgy)]  = 1 if ((px - py) == 1) else 0
+    X[(cpt,order_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
+    X[(cpt,order_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
+    X[(cpt,order_idx['Y<X'])]  = 1 if ((px - py) == 1) else 0
     e = graph.edge(X2Name[0][0], X2Name[1][0])
     y[cpt] = edge_idx[e]
     return cpt+1
 
-def build_Xy(gold, corpus, edge_idx, nkv_idx, sample_size, full=True):
+def build_Xy(gold, corpus, edge_idx, nkv_idx, sample_size, order_idx, full=True):
     """
     prepare data for the decision tree
     corpus: from which patterns are extracted
@@ -157,14 +162,13 @@ def build_Xy(gold, corpus, edge_idx, nkv_idx, sample_size, full=True):
     for each triple (n,k,v) in nkv_idx, X[nkv] = 1 if node n has feature (k,v)
     y = vector : y[X -> Y] = edge index between X and Y, None if there is no such edge
     """
-    xpy, xgy, xby = nkv_idx['X<Y'], nkv_idx['X>Y'], nkv_idx['X<<Y']
     cpt = 0
     if full is True:    
         X = np.zeros((sample_size, len(nkv_idx)))
         y = np.zeros(sample_size)
         for graph in corpus.values():
             for Xn,Yn in itertools.permutations(graph, 2):
-                cpt = edge_XY(graph, ((Xn,'X'),(Yn,'Y')), cpt, edge_idx, nkv_idx, X, y, xpy, xby, xgy)
+                cpt = edge_XY(graph, ((Xn,'X'),(Yn,'Y')), cpt, edge_idx, nkv_idx, X, y, order_idx)
         return X,y
 
 def check(corpus, excluded, edge):
@@ -181,12 +185,16 @@ def check(corpus, excluded, edge):
             print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}\n""")
     return not found
 
-def fit_dependency(clf,X,y,edge_idx,args):
+def fit_dependency(clf,X,y,edge_idx,dependency : str):
+    """
+    Given the samples in X,y
+    return the classifier for the specific edge indexed edge_idx
+    """
     print("learning")
-    if args.dependency:
-        edg = Fs_edge(args.dependency)
+    if dependency:
+        edg = Fs_edge(dependency)
         if edg not in edge_idx:
-            print(f"Issue: {args.dependency} is not a dependency of the corpus (e.g. subj)")
+            print(f"Issue: {dependency} is not a dependency of the corpus (e.g. subj)")
             sys.exit(2)
         else: y = (y == edge_idx[edg])
     else:
@@ -195,19 +203,23 @@ def fit_dependency(clf,X,y,edge_idx,args):
 
    
 def zero_knowledge(corpus_gold, args, request, param):
+    """
+    build a list of patterns specified in args
+    based upon request
+    """
     draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
     edges = {Fs_edge(x) for x in corpus_gold.count(Request(request, "e:X->Y"), ["e.label"]).keys()} | {None}
     edge_idx = e_index(edges)
     print("preprocessing")
     nodes = request.free_variables()["nodes"]  #free nodes = 'X', 'Y' in the request
-    nkv_idx, XY_number = nkv(draft, skipped_features, nodes)
+    nkv_idx, order_idx, XY_number = nkv(draft, skipped_features, nodes)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
-    X,y = build_Xy(corpus_gold,draft, edge_idx, nkv_idx, XY_number, True)
+    X,y = build_Xy(corpus_gold,draft, edge_idx, nkv_idx, XY_number, order_idx, True)
     clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
                                  max_depth=args.depth)
-    fit_dependency(clf, X, y, edge_idx, args)
+    fit_dependency(clf, X, y, edge_idx, args.dependency)
     if args.export_tree:
         export_graphviz(clf, out_file=args.export_tree, 
                         feature_names=[str(idx2nkv[i]) for i in range(len(idx2nkv))])
