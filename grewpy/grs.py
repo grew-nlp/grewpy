@@ -38,12 +38,7 @@ class RequestItem():
 
     def __repr__(self):
         return f"{self.sort} {{{ ';'.join([str(x) for x in self.items]) }}}"
-    
-    def nodes(self):
-        #TODO : hack for current purpose
-        return {'X','Y'}
-    def edges(self):
-        return {'e'}
+
 
 class Request():
     """
@@ -155,18 +150,11 @@ class Request():
                 raise ValueError(f"cannot build a clause list with {L}")
         else:
             raise ValueError("Abstract request")
-        
-    def free_variables(self):
-        """
-        return names that will be associated to a search, 
-        one side for nodes, an other for edges
-        """
-        FVn, FVe = set(), set()
-        for cl in self.items:
-            if cl.sort == 'pattern':
-                FVn |= cl.nodes()
-                FVe |= cl.edges()
-        return {"nodes" : FVn, "edges": FVe}
+
+    def named_entities(self):
+        req = {"command": "request_named_entities", "request": self.json_data(),}
+        reply = network.send_and_receive(req)
+        return reply
 
 class Command:
     def __init__(self,s):

@@ -43,7 +43,7 @@ def check(corpus, excluded, edge):
     return not found
 
 def learn_zero_knowledge(gold, args, request, param):
-    nodes = request.free_variables()['nodes']
+    nodes = request.named_entities()['nodes']
     _, X, y, edge_idx, nkv_idx = observations(gold, request, nodes, param)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     requests, clf = clf_dependency(args.dependency,X,y,edge_idx,idx2nkv,request,('X','Y'),param,args)
