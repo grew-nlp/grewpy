@@ -113,8 +113,7 @@ def order_constraints(nodes):
 
 def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     """
-    given a corpus, return the dictionnary  nkv_idx -> index and indexes for order constraints
-    an nkv to an index
+    given a corpus, return the dictionnary  nkv -> index and indexes for order constraints
     an nkv is either 
     a triple (n,k,v)
     - n in ('X', 'Y', ...)
@@ -123,7 +122,6 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     or nkv is an order constraint: nkv = "X << Y"
     for each nk, we keep only max_feature_values 
     pattern_nodes = (X, Y, ...) list of nodes
-    pair_number = corpus.count( "X << Y")
     """
     observations = dict() #maps an nk => v => nb of occurrences
     for graph in corpus.values():
@@ -203,20 +201,7 @@ def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ra
         cpt = edge_XY(graph, nodes, cpt, edge_idx, nkv_idx, X, y, order_idx)
     return X,y
 
-def fit_dependency(clf,X,y,edge_idx,edg : Fs_edge | None):
-    """
-    Given the samples in X,y
-    return the classifier for the specific edge indexed edge_idx
-    """
-    print("learning")
-    if edg not in edge_idx:
-        print(f"Issue: {edg} is not a dependency of the corpus (e.g. subj)")
-        sys.exit(2)
-    else: 
-        y = (y == edge_idx[edg])
-    clf.fit(X, y)
-
-def observations(corpus_gold,request, nodes, param):
+def observations(corpus_gold : Corpus,request : Request, nodes, param):
     """
     for each sample corresponding to the request, 
     return X[(sample,nkv)] -> 0/1 if nkv in sample
@@ -232,16 +217,17 @@ def observations(corpus_gold,request, nodes, param):
     X,y = build_Xy(corpus_gold,draft, request, nodes, edge_idx, nkv_idx, order_idx, param['ratio'])
     return draft,X,y,edge_idx,nkv_idx
 
-def clf_dependency(dependency,X,y,edge_idx,idx2nkv,request,nodes,param, depth, details):
+def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,nodes,param, depth, details):
     """
-    build a decision tree classifier for the dependency
-    with respect to observations X,y
+    build a decision tree classifier for the `dependency`
+    with respect to observations `X`, `y`
     """
     clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
                                  max_depth=depth)
-    fit_dependency(clf, X, y, edge_idx, dependency)
-    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1,details) #1=good outcome
+    print("learning")
+    clf.fit(X, y == dependency)
+    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1, details) #1=good outcome
     return requests, clf
 
 

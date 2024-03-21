@@ -97,13 +97,14 @@ def append_delete_head(grs : GRSDraft):
 
 
 def zero_knowledge_learning(gold, corpus_empty, request, args, param):
-    nodes = request.free_variables()['nodes']
+    nodes = request.named_entities()['nodes']
     draft, X, y, edge_idx, nkv_idx = observations(gold, request, nodes, param)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     rules = []
     for dependency in edge_idx:
         if dependency != None:
-            requests, clf = clf_dependency(dependency,X,y,edge_idx,idx2nkv,request,('X','Y'),param,args.depth,False)
+            dep = edge_idx[dependency]
+            requests, _ = clf_dependency(dep,X,y,idx2nkv,request,('X','Y'),param,args.depth,False)
             rules += [Rule(Request(req,'Y[head="1"]'),Commands(Add_edge('X',dependency,'Y'))) for req in requests]
     
     named_rules = Package({f'r{i}' : rules[i] for i in range(len(rules))})

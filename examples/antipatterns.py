@@ -48,8 +48,11 @@ def learn_zero_knowledge(gold, args, sketch, param):
     nodes = sketch.named_entities()['nodes']
     _, X, y, edge_idx, nkv_idx = observations(gold, sketch, nodes, param)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
-    dep = Fs_edge(args.dependency)
-    requests, clf = clf_dependency(dep,X,y,edge_idx,idx2nkv,sketch,nodes,param,args.depth, args.branch_details)
+    dep = Fs_edge(args.dependency) if args.dependency else None
+    if dep not in edge_idx:
+        print(f"no such dependency in corpus (e.g. subj): {args.dependency}")
+        sys.exit(2)
+    requests, clf = clf_dependency(edge_idx[dep], X, y, idx2nkv,sketch,nodes,param,args.depth, args.branch_details)
     if args.export_tree:
         export_graphviz(clf, out_file=args.export_tree, 
                         feature_names=[str(idx2nkv[i]) for i in range(len(idx2nkv))])    
