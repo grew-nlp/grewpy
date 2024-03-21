@@ -46,6 +46,8 @@ def nkv2req(n):
     """
     if isinstance(n,str): return n #it is an order constraints
     m,(feat, value) = n #it is a feature constraints
+    if value == '"':
+        value = '\\"'
     return f'{m}[{feat}="{value}"]'
 
 def build_request(T, n, back, request_nodes, request, idx2nkv, details):
@@ -144,16 +146,20 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
 def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
     for Xid, Xname in X2Name:
         for k,v in graph[Xid].items():
-            if (Xname,(k,v)) in nkv_idx: X[(cpt,nkv_idx[(Xname,(k,v))])] += 1    
-    px, py = int(X2Name[0][0]), int(X2Name[1][0])
-    X[(cpt,order_idx['X<Y'])]  = 1 if ((px - py) == -1) else 0
-    X[(cpt,order_idx['X<<Y'])] = 1 if ((px - py) < 0) else 0
-    X[(cpt,order_idx['Y<X'])]  = 1 if ((px - py) == 1) else 0
+            if (Xname,(k,v)) in nkv_idx: X[(cpt,nkv_idx[(Xname,(k,v))])] += 1
+    
+    positions = {b : int(a) for a,b in X2Name}
+    for n1,n2 in itertools.permutations(positions.keys(), 2):
+        n12, n1_2 = f'{n1}<{n2}',f'{n1}<<{n2}'
+        if n12 in order_idx:
+            X[(cpt, order_idx[n12])] = 1 if positions[n1] - positions[n2] == -1 else 0
+        if n1_2 in order_idx:
+            X[(cpt, order_idx[n1_2])] = 1 if positions[n1] < positions[n2] else 0
     e = graph.edge(X2Name[0][0], X2Name[1][0])
     y[cpt] = edge_idx[e]
     return cpt+1
 
-def build_Xy(gold, corpus, request, edge_idx, nkv_idx, order_idx, ratio=0):
+def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ratio=0):
     """
     prepare data for learning
     corpus: from which patterns are extracted
@@ -176,13 +182,14 @@ def build_Xy(gold, corpus, request, edge_idx, nkv_idx, order_idx, ratio=0):
 
     positives = gold.search(Request(request, 'X->Y'))
     negatives = gold.search(Request(request).without('X->Y'))
-    N = len(positives)*ratio if ratio else len(positives)+len(negatives)
+    En = len(positives)+len(negatives)
+    N = min(len(positives)*ratio, En) if ratio else En 
     X = np.zeros((N, len(nkv_idx)))
     y = np.zeros(N)
     cpt = 0
     for match in positives:
         graph = corpus[match['sent_id']]
-        nodes = [(match["matching"]["nodes"][n],n) for n in ('X','Y')]
+        nodes = [(match["matching"]["nodes"][n],n) for n in free_nodes]
         cpt = edge_XY(graph, nodes, cpt, edge_idx, nkv_idx, X, y, order_idx)
     if ratio == 0:
         selection = negatives
@@ -191,24 +198,21 @@ def build_Xy(gold, corpus, request, edge_idx, nkv_idx, order_idx, ratio=0):
         selection = random.choices(negatives, weights=weights, k=N-cpt)
     for match in selection:
         graph = corpus[match['sent_id']]
-        nodes = [(match["matching"]["nodes"][n],n) for n in ('X','Y')]
+        nodes = [(match["matching"]["nodes"][n],n) for n in free_nodes]
         cpt = edge_XY(graph, nodes, cpt, edge_idx, nkv_idx, X, y, order_idx)
     return X,y
 
-def fit_dependency(clf,X,y,edge_idx,dependency : str):
+def fit_dependency(clf,X,y,edge_idx,edg : Fs_edge | None):
     """
     Given the samples in X,y
     return the classifier for the specific edge indexed edge_idx
     """
     print("learning")
-    if dependency:
-        edg = Fs_edge(dependency)
-        if edg not in edge_idx:
-            print(f"Issue: {dependency} is not a dependency of the corpus (e.g. subj)")
-            sys.exit(2)
-        else: y = (y == edge_idx[edg])
-    else:
-        y = (y == edge_idx[None])
+    if edg not in edge_idx:
+        print(f"Issue: {edg} is not a dependency of the corpus (e.g. subj)")
+        sys.exit(2)
+    else: 
+        y = (y == edge_idx[edg])
     clf.fit(X, y)
 
 def observations(corpus_gold,request, nodes, param):
@@ -219,24 +223,24 @@ def observations(corpus_gold,request, nodes, param):
     """
     draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
-    edges = {Fs_edge(x) for x in corpus_gold.count(Request(request, "e:X->Y"), ["e.label"]).keys()} | {None}
+    edges = {Fs_edge(x) for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None}
     #None for no dependency
     edge_idx = classifier.e_index(edges)
     print("preprocessing")
     nkv_idx, order_idx = nkv(draft, skipped_features, nodes)
-    X,y = build_Xy(corpus_gold,draft, request, edge_idx, nkv_idx, order_idx, 0)
+    X,y = build_Xy(corpus_gold,draft, request, nodes, edge_idx, nkv_idx, order_idx, param['ratio'])
     return draft,X,y,edge_idx,nkv_idx
 
-def clf_dependency(dependency,X,y,edge_idx,idx2nkv,request,nodes,param, args):
+def clf_dependency(dependency,X,y,edge_idx,idx2nkv,request,nodes,param, depth, details):
     """
     build a decision tree classifier for the dependency
     with respect to observations X,y
     """
     clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
-                                 max_depth=args.depth)
+                                 max_depth=depth)
     fit_dependency(clf, X, y, edge_idx, dependency)
-    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1, args.branch_details) #1=good outcome
+    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1,details) #1=good outcome
     return requests, clf
 
 

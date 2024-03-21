@@ -2,15 +2,14 @@ from sklearn.tree import export_graphviz
 import argparse
 import logging
 
-from rule_forgery import observations, patterns, clf_dependency
+from rule_forgery import observations, clf_dependency
 
 # Use local grew lib
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
 
-from grewpy import Request, Rule, Commands, CorpusDraft
-from grewpy import Corpus, GRS, set_config
-from grewpy import grew_web
+from grewpy import Request, CorpusDraft
+from grewpy import Corpus, set_config
 from grewpy.graph import Fs_edge
 
 def clear_but_working(g):
@@ -28,25 +27,29 @@ def basic_edges(g):
     return g
 
 
-def check(corpus, excluded, edge):
+def check(corpus, sketch, excluded, edge):
     """
     return true if no pattern within excluded has an edge 
     """
     found = False
     for request in excluded:
-        request = request.without(f'X-["{edge}"]->Y') if edge else request.with_(f'X-["{edge}"]->Y')
-        lines = corpus.search(request)
+        if edge:
+            req = Request(request).without(f'X-["{edge}"]->Y')
+        else:
+            req = Request(request).with_(f'X->Y')
+        lines = corpus.search(req)
         if lines:
             found = True
             print(f"forbidden pattern\n{request}\n")
             print(f"""sent_id : {",".join(f"{match['sent_id']}" for match in lines)}\n""")
     return not found
 
-def learn_zero_knowledge(gold, args, request, param):
-    nodes = request.named_entities()['nodes']
-    _, X, y, edge_idx, nkv_idx = observations(gold, request, nodes, param)
+def learn_zero_knowledge(gold, args, sketch, param):
+    nodes = sketch.named_entities()['nodes']
+    _, X, y, edge_idx, nkv_idx = observations(gold, sketch, nodes, param)
     idx2nkv = {v:k for k,v in nkv_idx.items()}
-    requests, clf = clf_dependency(args.dependency,X,y,edge_idx,idx2nkv,request,('X','Y'),param,args)
+    dep = Fs_edge(args.dependency)
+    requests, clf = clf_dependency(dep,X,y,edge_idx,idx2nkv,sketch,nodes,param,args.depth, args.branch_details)
     if args.export_tree:
         export_graphviz(clf, out_file=args.export_tree, 
                         feature_names=[str(idx2nkv[i]) for i in range(len(idx2nkv))])    
@@ -55,7 +58,7 @@ def learn_zero_knowledge(gold, args, request, param):
             for pattern in requests:
                 f.write(f"%%%\n{str(pattern)}\n")
     print("testing patterns")            
-    if check(corpus_gold, requests, args.dependency):
+    if check(corpus_gold, sketch, requests, args.dependency):
         print("self verification: no forbidden patterns found")
 
 def parse_request(filename):
@@ -102,7 +105,8 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--threshold', default=1e-10, type=float, help="minimal threshold to consider a node as pure")
     parser.add_argument('-s','--nodetails',action="store_true", help="simplifies edges: replace comp:obl by comp")
     parser.add_argument('-d', '--depth', default=8, help="depth of the binary decision tree")
-    parser.add_argument('-b', '--branch_details', action="store_true", help="if set, requests are fully decomposed")   
+    parser.add_argument('-b', '--branch_details', action="store_true", help="if set, requests are fully decomposed")  
+    parser.add_argument('--request',default='', help='request file') 
     parser.add_argument('--export_tree', default='', help='export classifier tree as a dot file')
     parser.add_argument('--dependency', default='', help='export classifier tree as a dot file')
     args = parser.parse_args()
@@ -112,13 +116,19 @@ if __name__ == "__main__":
         "skipped_features":  {'xpos', 'SpaceAfter', 'Shared', 'textform', 'Typo', 'form', 'wordform', 'CorrectForm'},
         "node_impurity": 0.15,
         "threshold" : args.threshold,
-        "tree_depth" : args.depth
+        "tree_depth" : args.depth,
+        "ratio": 50
     }
     corpus_gold = Corpus(args.corpus)
     if args.nodetails:
         corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     if args.action == 'learn':
-        learn_zero_knowledge(corpus_gold, args, Request('X[];Y[]'), param)
+        if args.request:
+            with open(args.request) as f:
+                request = Request(f.read())
+        else:
+            request = Request('X[];Y[]')
+        learn_zero_knowledge(corpus_gold, args, request, param)
     elif args.action == 'verify':
         verify(corpus_gold, args)
     else:
