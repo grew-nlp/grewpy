@@ -155,7 +155,8 @@ def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
             X[(cpt, order_idx[n12])] = 1 if positions[n1] - positions[n2] == -1 else 0
         if n1_2 in order_idx:
             X[(cpt, order_idx[n1_2])] = 1 if positions[n1] < positions[n2] else 0
-    e = graph.edge(X2Name[0][0], X2Name[1][0])
+    Xn2id = {Xn : Xid for Xid,Xn in X2Name}
+    e = graph.edge(Xn2id['X'], Xn2id['Y'])
     y[cpt] = edge_idx[e]
     return cpt+1
 
