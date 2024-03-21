@@ -256,6 +256,21 @@ class Corpus(AbstractCorpus):
         })
         return reply
 
+    def count_feature_values(self, include=None, exclude=["xpos","wordform","textform","SpaceAfter"]):
+        """
+        return a dict with feature names as key and subdict a value
+        for each feature name, the subdict maps existing feature values with the number of occurrences
+        if include is set as a list of string, only feature names in the list are taken into account
+        else exclude defines the list of feature names in the list whihc are not taken into account
+        """
+        reply = network.send_and_receive({
+            "command": "corpus_count_feature_values",
+            "corpus_index": self._id,
+            "include": include,
+            "exclude": exclude,
+        })
+        return reply
+
     def run(self, Grs, strat="main"):
         return Grs.run(self, strat)
 

@@ -123,19 +123,13 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     for each nk, we keep only max_feature_values 
     pattern_nodes = (X, Y, ...) list of nodes
     """
-    observations = dict() #maps an nk => v => nb of occurrences
-    for graph in corpus.values():
-        for N in graph.features.values():
-            for k, v in N.items():
-                if k not in skipped_features:
-                    if k not in observations:
-                        observations[k] = dict()
-                    observations[k][v] = observations[k].get(v, 0)+1
-    ccc =  set()
-    for k in observations:
-        T = sorted([(occurrences,v) for v, occurrences in observations[k].items()], reverse=True)
-        ccc |= {(k,v) for _,v in  T[:max_feature_values]}
-    nkv = itertools.product(pattern_nodes, ccc)
+    observations = corpus.count_feature_values(exclude=list(skipped_features))
+    feat_values_set = set()
+    for k,vocc in observations.items():
+        T = sorted([(occ,v) for v, occ in vocc.items()], reverse=True)
+        feat_values_set |= {(k,v) for _,v in  T[:max_feature_values]}
+    
+    nkv = itertools.product(pattern_nodes, feat_values_set)
     nkv = set(nkv) | order_constraints(pattern_nodes)
     nkv_idx = classifier.e_index(nkv)
     order_idx = {k : v for k,v in nkv_idx.items() if isinstance(k,str)} #list of order constraints 
@@ -213,7 +207,7 @@ def observations(corpus_gold : Corpus,request : Request, nodes, param):
     #None for no dependency
     edge_idx = classifier.e_index(edges)
     print("preprocessing")
-    nkv_idx, order_idx = nkv(draft, skipped_features, nodes)
+    nkv_idx, order_idx = nkv(corpus_gold, skipped_features, nodes)
     X,y = build_Xy(corpus_gold,draft, request, nodes, edge_idx, nkv_idx, order_idx, param['ratio'])
     return draft,X,y,edge_idx,nkv_idx
 
