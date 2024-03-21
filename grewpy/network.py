@@ -4,7 +4,7 @@ from subprocess import Popen, PIPE
 import time
 import socket
 import os.path
-import json
+import json, re
 import os
 import sys
 
@@ -118,6 +118,15 @@ def compareVersion(version1, version2):
    return 0
 
 def check_version():
+    req = { "command": "get_version" }
+    current_version = send_and_receive(req)
+    current_version = re.match("[^-]*", current_version).group(0)
+    if compareVersion (current_version, minimal_grewpy_backend_version) < 0:
+        print (f"Incompatible grewpy_backend version.", file=sys.stderr)
+        print (f"You have version {current_version}, but it should be {minimal_grewpy_backend_version} or higher", file=sys.stderr)
+        print (f"Please upgrade grewpy_backend (see https://grew.fr/usage/python#upgrade)", file=sys.stderr)
+
+def check_be_version():
     req = { "command": "get_version" }
     current_version = send_and_receive(req)
     if compareVersion (current_version, minimal_grewpy_backend_version) < 0:
