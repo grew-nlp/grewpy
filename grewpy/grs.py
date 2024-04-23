@@ -1,10 +1,41 @@
 import json
 import os.path
+from typing import List, Tuple
 
 from . import network
 from .grew import JSON
 from grewpy.graph import Graph
 from .corpus import Corpus, CorpusDraft, GrewError
+
+import lark
+
+request_grammar = """
+%import common.ESCAPED_STRING
+COMMENT: /%[^\n]*/x
+%ignore COMMENT
+WSS.10 : /\\s+/
+%ignore WSS
+MINUS_CLOSE.2 : "-"|"]"
+WORD : /\\w+/
+OTHER_ONES : /[[<>;_=.]+/
+lines : (MINUS_CLOSE|WORD|OTHER_ONES|ESCAPED_STRING)+
+KEYWORDS : "pattern" | "global" | "with" | "without"
+request_item : KEYWORDS "{" lines "}"
+request : request_item+
+"""
+
+req_grammar_ = lark.Lark(request_grammar, start="request")
+
+def parse_request(s : str) -> List[Tuple[str,str]]:
+    try:
+        p = req_grammar_.parse(s)
+        items = []
+        for N in p.children:
+            content = "".join([M.value for M in N.children[1].children])
+            items.append( (N.children[0].value, content))
+        return items
+    except Exception as e:
+        print(f"Could not parse: {e}")
 
 class RequestItem():
     def __init__(self,sort : str,*L):
