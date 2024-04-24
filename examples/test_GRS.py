@@ -79,4 +79,12 @@ print("------------- print (rules of grs) -------------")
 for d in grs.rules():
     print(f"rule name: {d}\n{grs[d]} \n")
 
+print("\n============================== TEST 5 ==============================")
+print("  Parse a GRS")
+print("------------- print (rules of grs) -------------")
+print(Request.parse_request("""
+pattern { X -[mod:comp]->Y; X[Gen=Fem];Y.lemma="oups";}
+without { Z -> X}
+"""))
+
 exit(0)

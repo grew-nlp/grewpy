@@ -15,27 +15,15 @@ COMMENT: /%[^\n]*/x
 %ignore COMMENT
 WSS.10 : /\\s+/
 %ignore WSS
-MINUS_CLOSE.2 : "-"|"]"
+SYMBOLS.2 : "-"|"]"|/[[<>;_=.:#]+/
 WORD : /\\w+/
-OTHER_ONES : /[[<>;_=.]+/
-lines : (MINUS_CLOSE|WORD|OTHER_ONES|ESCAPED_STRING)+
+lines : (SYMBOLS|WORD|ESCAPED_STRING)+
 KEYWORDS : "pattern" | "global" | "with" | "without"
 request_item : KEYWORDS "{" lines "}"
 request : request_item+
 """
 
 req_grammar_ = lark.Lark(request_grammar, start="request")
-
-def parse_request(s : str) -> List[Tuple[str,str]]:
-    try:
-        p = req_grammar_.parse(s)
-        items = []
-        for N in p.children:
-            content = "".join([M.value for M in N.children[1].children])
-            items.append( (N.children[0].value, content))
-        return items
-    except Exception as e:
-        print(f"Could not parse: {e}")
 
 class RequestItem():
     def __init__(self,sort : str,*L):
@@ -138,6 +126,18 @@ class Request():
         req = {"command": "request_parse", "request": string_request}
         reply = network.send_and_receive(req)
         return cls(reply["index"], string_request)
+
+    @staticmethod
+    def parse_request(s : str) -> List[Tuple[str,str]]:
+        try:
+            p = req_grammar_.parse(s)
+            items = []
+            for N in p.children:
+                content = "".join([M.value for M in N.children[1].children])
+                items.append( (N.children[0].value, content))
+            return items
+        except Exception as e:
+            print(f"Could not parse: {e}")
 
     def json_data(self):
         if hasattr(self, 'items'):
