@@ -130,7 +130,7 @@ if __name__ == "__main__":
             with open(args.request) as f:
                 request = Request(f.read())
         else:
-            request = Request('X[];Y[]')
+            request = Request('pattern { X[];Y[] }')
         learn_zero_knowledge(corpus_gold, args, request, param)
     elif args.action == 'verify':
         verify(corpus_gold, args)

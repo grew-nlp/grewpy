@@ -11,18 +11,17 @@ import lark
 
 request_grammar = """
 %import common.ESCAPED_STRING
+%import common.WS
 COMMENT: /%[^\n]*/x
 %ignore COMMENT
-WSS.10 : /\\s+/
-%ignore WSS
-SYMBOLS.2 : "-"|"]"|/[[<>;_=.:#]+/
+%ignore WS
+SYMBOLS.2 : "-"|"]"|"["|/[<>;_=.:#]+/
 WORD : /\\w+/
 lines : (SYMBOLS|WORD|ESCAPED_STRING)+
 KEYWORDS : "pattern" | "global" | "with" | "without"
 request_item : KEYWORDS "{" lines "}"
 request : request_item+
 """
-
 req_grammar_ = lark.Lark(request_grammar, start="request")
 
 class RequestItem():
@@ -58,6 +57,11 @@ class RequestItem():
     def __repr__(self):
         return f"{self.sort} {{{ ';'.join([str(x) for x in self.items]) }}}"
 
+def check(L):
+    for e in L:
+        if not isinstance(e,RequestItem):
+            return False
+    return True
 
 class Request():
     """
@@ -65,33 +69,28 @@ class Request():
     """
     def __init__(self, *L):
         """
-        L is either a list of
-         - RequestItem or
-         - (pattern) string or a
-         - Request (for copies)
+        L is either:
+         - nothing,
+         - an other request (for a copy)
+         - or a grew-syntax request string
+         - or a list of requestitems
         """
-        if len(L) == 2 and isinstance(L[0],int):
-            self.index = L[0]
-            self.string = L[1]
-        else:
-            elts = tuple()
-            for e in L:
-                if isinstance(e,str):
-                    elts += (RequestItem("pattern", e),)
-                elif isinstance(e,RequestItem):
-                    elts += (e,)
-                elif isinstance(e,Request):
-                    elts += e.items
-                elif isinstance(e,tuple): #supposed to be a list of ClauseList
-                    elts += e
-                else:
-                    try:
-                        #suppose it is a generator
-                        for x in e:
-                            elts += (x,)
-                    except:
-                        raise ValueError(f"{e} cannot be used to build a Request")
-            self.items = elts
+        if len(L) == 0:
+            self.items = tuple()
+            return
+        if len(L) == 1:
+            R = L[0]
+            if isinstance(R, str):
+                self.items = [RequestItem(t,data) for t,data in Request.parse_request(R)] 
+                return
+            if isinstance(R, Request):
+                self.items = tuple(R.items)
+                return
+        if check(L):
+            self.items = L
+            return
+        raise TypeError(f"cannot build a request out of {L}")
+        
 
     def without(self, *L):
         if hasattr(self, 'items'):
@@ -169,7 +168,7 @@ class Request():
     def append(self, *L):
         """
         Append a new ClauseList to the Request
-        L is given either as a pair (s,t) with "s \in {'pattern','without','meta'} and t : str 
+        L is given either as a pair (s,t) with "s \\in {'pattern','without','meta'} and t : str 
         or L[0] is a ClauseList 
         """
         if hasattr(self, 'items'):

@@ -50,7 +50,7 @@ print (len (grs.run(graph, strat="s3")))
 print ("\n============================== TEST 3 ==============================")
 print ("  Build a GRS with explicit values")
 
-req_det_n = Request("N1[upos=DET]","N2[upos=NOUN]; N1 < N2").without("N2 -> N1")
+req_det_n = Request("pattern { N1[upos=DET]; N2[upos=NOUN]; N1 < N2 }").without("N2 -> N1")
 add_det_cde = Commands("add_edge N2 -[det]-> N1")
 R = Rule(req_det_n, add_det_cde)
 grs = GRSDraft({"det":R,"s1":"det","s2":"Onf(det)","s3":"Iter(det)"})

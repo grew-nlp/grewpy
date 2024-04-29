@@ -173,7 +173,7 @@ def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ra
         return 1/(delta+1)
     cpt = 0
 
-    positives = gold.search(Request(request, 'X->Y'))
+    positives = gold.search(Request(request).with_('X->Y'))
     negatives = gold.search(Request(request).without('X->Y'))
     En = len(positives)+len(negatives)
     N = min(len(positives)*ratio, En) if ratio else En 
@@ -203,7 +203,7 @@ def observations(corpus_gold : Corpus,request : Request, nodes, param):
     """
     draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
-    edges = {Fs_edge(x) for x in corpus_gold.count(Request("e:X->Y"), ["e.label"]).keys()} | {None}
+    edges = {Fs_edge(x) for x in corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]).keys()} | {None}
     #None for no dependency
     edge_idx = classifier.e_index(edges)
     print("preprocessing")
