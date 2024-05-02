@@ -64,17 +64,17 @@ def check(L):
     return True
 
 class Request():
-    """
+    '''
     lists of ClauseList
-    """
+    '''
     def __init__(self, *L):
-        """
+        '''
         L is either:
          - nothing,
          - an other request (for a copy)
          - or a grew-syntax request string
          - or a list of requestitems
-        """
+        '''
         if len(L) == 0:
             self.items = tuple()
             return
@@ -102,6 +102,16 @@ class Request():
     def global_(self, *L):
         self.items += tuple(RequestItem("global", e) for e in L)
         return self
+
+    def pattern(self, *L):
+        self.items += tuple(RequestItem("pattern", e) for e in L)
+        return self
+
+    def pattern_(self):
+        """
+        return the pattern of self as a tuple
+        """
+        return Request(p for p in self.items if p.sort == "pattern")
 
     @classmethod
     def from_json(cls,json_data):
@@ -138,19 +148,13 @@ class Request():
         return "\n".join([str(e) for e in self.items])
         
     def __iter__(self):
-        return iter(self.items)
-        
-    def pattern(self):
-        """
-        return the pattern of self as a tuple
-        """
-        return Request(p for p in self.items if p.sort == "pattern")
-        
+        return iter(self.items)        
+    
     def append(self, *L):
         """
-        Append a new ClauseList to the Request
+        Append a new RequestItem to the Request
         L is given either as a pair (s,t) with "s \\in {'pattern','without','meta'} and t : str 
-        or L[0] is a ClauseList 
+        or L[0] is a RequestItem
         """
         if len(L) == 2:
             self.items = self.items + (RequestItem(L[0], L[1]),)

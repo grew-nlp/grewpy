@@ -4,7 +4,7 @@ import numpy as np
 import re
 import itertools, random
 
-# UU$se local grew lib
+# Use local grew lib
 import os
 import sys
 sys.path.insert(0, os.path.abspath(
@@ -224,15 +224,13 @@ def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,nodes,param, 
     requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1, details) #1=good outcome
     return requests, clf
 
-
-'''
-
+"""
 def anomaly(obsL,  threshold):
-    """
+    '''
         L is a key within self
         return for L an edge and its occurrence evaluation 
         and number of total occurrences if beyond base_threshold
-    """
+    '''
     s = sum(obsL.values())
     for x, v in obsL.items():
         if v > threshold * s and x:
@@ -240,14 +238,14 @@ def anomaly(obsL,  threshold):
     return None, None, None
 
 def build_rules(sketch, observation, param, rule_name, verbose=False):
-    """
+    '''
     search a rule adding an edge X -> Y, given a sketch  
     we build the clusters, then
     for each pair (X, upos=U1), (Y, upos=U2), we search for 
     some edge e occuring at least with probability base_threshold
     in which case, we define a rule R: 
     base_pattern /\ [X.upos=U1] /\ [Y.upos=U2] => add_edge X-[e]-Y
-    """
+    '''
     def crit_to_request(crit, val):
         if ".label" in crit:
             edge_name = re.match("(.*?).label", crit).group(1)
@@ -274,14 +272,14 @@ def build_rules(sketch, observation, param, rule_name, verbose=False):
     return rules, loose_rules
 
 def refine_rule(R, corpus, param) -> list[Rule]:
-    """
+    '''
     Takes a request R, tries to find variants
     the result is the list of rules that refine pattern R
     for DEBUG, we return the decision tree classifier
-    """
+    '''
     res = []
     matchings = corpus.search(R)
-    """
+    '''
     clf = classifier.Classifier(matchings, corpus, param)
     if clf.clf:
         #branc, leaves = classifier.back_tree(clf.clf.tree_)
@@ -303,17 +301,17 @@ def refine_rule(R, corpus, param) -> list[Rule]:
                 rule = Rule(request, Commands(Add_edge("X", e, "Y")))
                 res.append(rule)
     return res, clf
-    """
+    '''
     return classifier.build_rules(matchings, corpus, R, param), None
 
 
 
 def refine_rules(Rs, corpus, param, verbose=False):
-    """
+    '''
     as above, but applies on a list of rules
     and filter only "correct" rules, see `param`
     return the list of refined version of rules Rs
-    """
+    '''
     Rse = WorkingGRS()
     for rule_name in Rs.rules():
         R = Rs[rule_name]
@@ -342,9 +340,9 @@ def refine_rules(Rs, corpus, param, verbose=False):
     return Rse
 
 
-"""
+'''
 Learning sketches
-"""
+'''
 def edge_between_X_and_Y(P):
     return Request(P, 'e:X->Y')
 
@@ -358,9 +356,9 @@ def simple_sketch(r):
 
 
 def apply_sketches(sketches, corpus, param):
-    """
+    '''
     find rules from sketches
-    """
+    '''
     rules = WorkingGRS()
     loose_rules = WorkingGRS()
     for sketch_name in sketches:
@@ -373,9 +371,9 @@ def apply_sketches(sketches, corpus, param):
 
 
 def adjacent_rules(corpus: Corpus, param) -> WorkingGRS:
-    """
+    '''
     build all adjacent rules. They are supposed to connect words at distance 1
-    """
+    '''
     sadj = dict()
     sadj["adjacent_lr"] = simple_sketch(Request("X[];Y[head];X<Y"))
     sadj["adjacent_rl"] = simple_sketch(Request("X[];Y[head];Y<X"))
@@ -439,11 +437,11 @@ def local_rules(corpus: Corpus, param) -> WorkingGRS:
     return apply_sketches(sadj, corpus, param)
 
 def feature_value_occurences(matchings, corpus, skipped_features, max_per_feature):
-    """
+    '''
     given a matchings corresponding to some request on the corpus,
     return a dict mapping (n,feature) =>(values)=>occurrences to its occurence number in matchings
     within the corpus. n : node name, feature like 'Gender', values like 'Fem'
-    """
+    '''
     observation = dict()
     for m in matchings:
         graph = corpus[m["sent_id"]]
@@ -466,5 +464,4 @@ def feature_value_occurences(matchings, corpus, skipped_features, max_per_featur
             for (o,v) in L[:max_per_feature]:
                 obs[(n,k,v)] = o
     return obs
-
-'''
+"""
