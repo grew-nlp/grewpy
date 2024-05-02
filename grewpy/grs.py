@@ -91,21 +91,14 @@ class Request():
             return
         raise TypeError(f"cannot build a request out of {L}")
         
-
     def without(self, *L):
-        if hasattr(self, 'items'):
-            self.items += tuple(RequestItem("without", e) for e in L)
-            return self
-        else:
-            raise ValueError("Abstract request")
-
+        self.items += tuple(RequestItem("without", e) for e in L)
+        return self
+        
     def with_(self, *L):
-        if hasattr(self, 'items'):
-            self.items += tuple(RequestItem("with", e) for e in L)
-            return self
-        else:
-            raise ValueError("Abstract request")
-
+        self.items += tuple(RequestItem("with", e) for e in L)
+        return self
+        
     def global_(self, *L):
         self.items += tuple(RequestItem("global", e) for e in L)
         return self
@@ -139,48 +132,33 @@ class Request():
             print(f"Could not parse: {e}")
 
     def json_data(self):
-        if hasattr(self, 'items'):
-            return [x.json_data() for x in self.items]
-        else:
-            return { "index": self.index }
-
+        return [x.json_data() for x in self.items]
+        
     def __str__(self):
-        if hasattr(self, 'items'):
-            return "\n".join([str(e) for e in self.items])
-        else:
-            return self.string
-
+        return "\n".join([str(e) for e in self.items])
+        
     def __iter__(self):
-        if hasattr(self, 'items'):
-            return iter(self.items)
-        else:
-            raise ValueError("Abstract request are not iterable")
-
+        return iter(self.items)
+        
     def pattern(self):
         """
         return the pattern of self as a tuple
         """
-        if hasattr(self, 'items'):
-            return Request(p for p in self.items if p.sort == "pattern")
-        else:
-            raise ValueError("Abstract request")
-
+        return Request(p for p in self.items if p.sort == "pattern")
+        
     def append(self, *L):
         """
         Append a new ClauseList to the Request
         L is given either as a pair (s,t) with "s \\in {'pattern','without','meta'} and t : str 
         or L[0] is a ClauseList 
         """
-        if hasattr(self, 'items'):
-            if len(L) == 2:
-                self.items = self.items + (RequestItem(L[0], L[1]),)
-            elif len(L) == 1:
-                self.items = self.items + L
-            else:
-                raise ValueError(f"cannot build a clause list with {L}")
+        if len(L) == 2:
+            self.items = self.items + (RequestItem(L[0], L[1]),)
+        elif len(L) == 1 and isinstance(L[0],RequestItem):
+            self.items = self.items + L
         else:
-            raise ValueError("Abstract request")
-
+            raise ValueError(f"cannot build a request with {L}")
+        
     def named_entities(self):
         req = {"command": "request_named_entities", "request": self.json_data(),}
         reply = network.send_and_receive(req)
