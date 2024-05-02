@@ -81,13 +81,13 @@ class Request():
         if len(L) == 1:
             R = L[0]
             if isinstance(R, str):
-                self.items = [RequestItem(t,data) for t,data in Request.parse_request(R)] 
+                self.items = tuple(RequestItem(t,data) for t,data in Request.parse_request(R))
                 return
             if isinstance(R, Request):
                 self.items = tuple(R.items)
                 return
         if check(L):
-            self.items = L
+            self.items = tuple(L)
             return
         raise TypeError(f"cannot build a request out of {L}")
         
