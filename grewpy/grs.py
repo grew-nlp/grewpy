@@ -15,9 +15,9 @@ request_grammar = """
 COMMENT: /%[^\n]*/x
 %ignore COMMENT
 %ignore WS
-SYMBOLS.2 : "-"|"]"|"["|/[<>;_=.:#]+/
-WORD : /\\w+/
-lines : (SYMBOLS|WORD|ESCAPED_STRING)+
+SYMBOLS.2 : "-"|"]"|"["|/[<>;_=.:#]/
+TOKEN : (/\\w/|SYMBOLS)+
+lines : (TOKEN|ESCAPED_STRING)+
 KEYWORDS : "pattern" | "global" | "with" | "without"
 request_item : KEYWORDS "{" lines "}"
 request : request_item+
