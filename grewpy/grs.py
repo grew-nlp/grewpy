@@ -1,4 +1,5 @@
 import json
+import sys
 import os.path
 from typing import List, Tuple
 
@@ -15,7 +16,7 @@ request_grammar = """
 COMMENT: /%[^\n]*/x
 %ignore COMMENT
 %ignore WS
-SYMBOLS.2 : "-"|"]"|"["|/[<>;_=.:#]/
+SYMBOLS.2 : "-"|"]"|"["|/[@,<>;_=.:#]/
 TOKEN : (/\\w/|SYMBOLS)+
 lines : (TOKEN|ESCAPED_STRING)+
 KEYWORDS : "pattern" | "global" | "with" | "without"
@@ -107,12 +108,6 @@ class Request():
         self.items += tuple(RequestItem("pattern", e) for e in L)
         return self
 
-    def pattern_(self):
-        """
-        return the pattern of self as a tuple
-        """
-        return Request(p for p in self.items if p.sort == "pattern")
-
     @classmethod
     def from_json(cls,json_data):
         if isinstance(json_data,str):
@@ -125,9 +120,8 @@ class Request():
 
     @classmethod
     def parse(cls, string_request):
-        req = {"command": "request_parse", "request": string_request}
-        reply = network.send_and_receive(req)
-        return cls(reply["index"], string_request)
+        print ("[Request.parse is DEPRECATED] see https://grew.fr/grewpy/upgrade_0.5", file=sys.stderr)
+        return cls(string_request)
 
     @staticmethod
     def parse_request(s : str) -> List[Tuple[str,str]]:

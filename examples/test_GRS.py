@@ -82,9 +82,7 @@ for d in grs.rules():
 print("\n============================== TEST 5 ==============================")
 print("  Parse a GRS")
 print("------------- print (rules of grs) -------------")
-print(Request.parse_request("""
+print(Request("""
 pattern { X -[mod:comp]->Y; X[Gen=Fem];Y.lemma="oups";}
 without { Z -> X}
 """))
-
-exit(0)
