@@ -9,6 +9,10 @@ from grewpy.graph import Graph
 from .corpus import Corpus, CorpusDraft, GrewError
 
 import lark
+import sys
+
+sys.stdout.write("hum")
+
 
 request_grammar = """
 %import common.ESCAPED_STRING
@@ -16,7 +20,7 @@ request_grammar = """
 COMMENT: /%[^\n]*/x
 %ignore COMMENT
 %ignore WS
-SYMBOLS.2 : "-"|"]"|"["|/[@,<>;_=.:#]/
+SYMBOLS.2 : "-"|"]"|"["|/[<>;_=.:#@]/
 TOKEN : (/\\w/|SYMBOLS)+
 lines : (TOKEN|ESCAPED_STRING)+
 KEYWORDS : "pattern" | "global" | "with" | "without"
@@ -107,6 +111,9 @@ class Request():
     def pattern(self, *L):
         self.items += tuple(RequestItem("pattern", e) for e in L)
         return self
+
+    def pattern_(self):
+        return Request(p for p in self.items if p.sort == "pattern")
 
     @classmethod
     def from_json(cls,json_data):

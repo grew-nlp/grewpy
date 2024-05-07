@@ -105,7 +105,7 @@ def zero_knowledge_learning(gold, corpus_empty, request, args, param):
         if dependency != None:
             dep = edge_idx[dependency]
             requests, _ = clf_dependency(dep,X,y,idx2nkv,request,('X','Y'),param,args.depth,False)
-            rules += [Rule(Request(req,'Y[head="1"]'),Commands(Add_edge('X',dependency,'Y'))) for req in requests]
+            rules += [Rule(Request(req).pattern('Y[head="1"]'),Commands(Add_edge('X',dependency,'Y'))) for req in requests]
     
     named_rules = Package({f'r{i}' : rules[i] for i in range(len(rules))})
     rules_with_head = append_delete_head(named_rules)
@@ -154,13 +154,13 @@ if __name__ == "__main__":
     if args.nodetails:
         corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     
-    A = corpus_gold.count(Request('X<Y;e:X->Y'))
-    A += corpus_gold.count(Request('Y<X;e:X->Y'))
+    A = corpus_gold.count(Request('pattern{X<Y;e:X->Y}'))
+    A += corpus_gold.count(Request('pattern{Y<X;e:X->Y}'))
     print("---target----")
-    print(f"""number of edges within corpus: {corpus_gold.count(Request('e: X -> Y'))}""")
+    print(f"""number of edges within corpus: {corpus_gold.count(Request('pattern{e: X -> Y}'))}""")
     print(f"number of adjacent relations: {A}")
-    print(corpus_gold.count(Request("e:X->Y"), ["e.label"]))
-    zero_knowledge_learning(corpus_gold, corpus_empty, Request('X[];Y[]'),args, param)
+    print(corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]))
+    zero_knowledge_learning(corpus_gold, corpus_empty, Request('pattern{X[];Y[]}'),args, param)
 
 
 """
