@@ -33,7 +33,7 @@ print (request_counter())
 
 print ("\n=============== Count request in a corpus ===============")
 upos="ADV"
-req = Request(f"X[upos={upos}]")
+req = Request(f"pattern{{X[upos={upos}]}}")
 
 print(" ----- basic count -----")
 print(f"nb of {upos} in {pud_file} = ", pud.count(req))
@@ -62,7 +62,19 @@ for sid in corpus:
 noedge_corpus = Corpus(corpus)
 print(" ----- counting nsubj within corpus -----")
 dep = "nsubj"
-req = Request(f"X[];Y[];X -[{dep}]-> Y")
+req = Request(f"pattern{{X[];Y[];X -[{dep}]-> Y}}")
+print(f"nb of {dep} in {pud_file} = ", pud.count(req))
+print(f"nb of {dep} in noedge_corpus = ", noedge_corpus.count(req))
+
+print(" ----- get a graph, print it -----")
+graph = pud[0]
+for n in graph.sucs:
+   for s in graph.sucs[n]:
+      print(s[1])
+      print(repr(s[1]))
+
+dep = "nsubj"
+req = Request(f"pattern{{X[];Y[];X -[{dep}]-> Y}}")
 print(f"nb of {dep} in {pud_file} = ", pud.count(req))
 print(f"nb of {dep} in noedge_corpus = ", noedge_corpus.count(req))
 

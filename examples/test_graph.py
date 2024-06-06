@@ -41,7 +41,8 @@ print("---remove C edges---")
 g1.sucs['C'] = []
 #g1.sucs['D'].append(('C',{'1':'F'}))
 
-
+print ("---- JSON output of a graph ----")
+print (json.dumps(g1.json_data(), indent=4))
 
 print ("---- JSON output of a graph ----")
 print (json.dumps(g1.json_data(), indent=4))

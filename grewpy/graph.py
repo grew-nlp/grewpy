@@ -43,6 +43,24 @@ class Fs_edge(dict):
     def __hash__(self):
         return hash(tuple((sorted(self.items()))))
     
+    def __str__(self):
+        return super().__repr__()
+
+    def __repr__(self):
+        return f"Fs_edge({str(self)})"
+
+    def compact(self):
+        """
+        sud style
+        """
+        s=self['1']
+        if '2' in self:
+            s = f"{s}:{self['2']}"
+        if 'deep' in self:
+            s = f"{s}@{self['deep']}"
+        return s
+    
+
     @staticmethod
     def extract(u, clauses, key='1'):
             if '@' in u:
@@ -65,17 +83,7 @@ class Fs_edge(dict):
                 Fs_edge.extract(s,clauses)
         return clauses
     
-    def __str__(self):
-        """
-        sud style
-        """
-        s=self['1']
-        if '2' in self:
-            s = f"{s}:{self['2']}"
-        if 'deep' in self:
-            s = f"{s}@{self['deep']}"
-        return s
-        
+         
 class Graph():
     """
     a dict mapping node keys to feature structure
