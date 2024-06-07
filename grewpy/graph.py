@@ -17,17 +17,9 @@ from . import network
 class Fs_edge(dict):
     def __init__(self,data):
         if isinstance(data,str):
-            #try to split a dict
-            if "=" in data and "," in data:
-                #suppose it is a dictionary
-                super().__init__(Fs_edge.decompose_edge(data))
-            else:
-                super().__init__(Fs_edge.decompose_edge(data))
+            super().__init__(Fs_edge.decompose_edge(data))
         elif isinstance(data, dict):
-            clauses = dict()
-            for k in data:
-                Fs_edge.extract(data[k],clauses, k)
-            super().__init__(clauses)
+            super().__init__(data)
         else:
             raise ValueError(f"data is not a feature structure {data}")
 
