@@ -13,11 +13,23 @@ from grewpy.network import send_and_receive
 from grewpy import utils
 from . import network
 
+from collections import OrderedDict
+
+# config is used to enocde the mapping from short/compact string representation of
+# edge feature structures and the long representation as a dictionary like string
+# See https://grew.fr/doc/graph/#edges
+
+# A config if a couple of:
+# - a string which is the basic feature name (the part without a prefix symbol)
+# - an ordered dict associating other features names to their serapator.
+# for now, mSUD config is hard-coded. TODO: make the config parametrized
+sud_config = ('1', OrderedDict([('2', ':'), ('deep', '@'), ('type', '/')]))
+
 ''' interfaces'''
 class Fs_edge(dict):
     def __init__(self,data):
         if isinstance(data,str):
-            super().__init__(Fs_edge.decompose_edge(data))
+            super().__init__(Fs_edge.parse(data))
         elif isinstance(data, dict):
             super().__init__(data)
         else:
@@ -41,41 +53,51 @@ class Fs_edge(dict):
     def __repr__(self):
         return f"Fs_edge({str(self)})"
 
+
     def compact(self):
         """
         sud style
         """
-        s=self['1']
-        if '2' in self:
-            s = f"{s}:{self['2']}"
-        if 'deep' in self:
-            s = f"{s}@{self['deep']}"
-        return s
-    
+        self_keys = set(self.keys())
+        config_keys = set(sud_config[1].keys())
+        config_keys.add (sud_config[0])
+        if self_keys.issubset(config_keys):
+            s = self[sud_config[0]]
+            for k,separator in sud_config[1].items():
+                if k in self:
+                    s = f"{s}{separator}{self[k]}"
+            return s
+        else:
+            return str(self)
 
     @staticmethod
-    def extract(u, clauses, key='1'):
-            if '@' in u:
-                u, t = u.split('@')
-                clauses['deep'] = t
-            if ':' in u:
-                u,t = u.split(':')
-                clauses['1'] = u
-                clauses['2'] = t
-            else:
-                clauses[key] = u
-    @staticmethod
-    def decompose_edge(s):
-        clauses = dict()
-        for it in s.split(","):
-            if '=' in s:
-                a,b = it.split("=")
-                clauses[a] = b
-            else:
-                Fs_edge.extract(s,clauses)
-        return clauses
-    
-         
+    def parse(s):
+        """
+        convert a string into a dictionary to be used by the constructor.
+        2 cases:
+         - s is a dict like string f=v,g=w…
+         - s in a compact string, like "comp:aux@tense/m"
+        return `GrewError` on ill formed input like "f=v,x"
+        """
+        if '=' in s: # s is parse as a dict like string f=v,g=w…
+            clauses = dict()
+            for item in s.split(","):
+                if '=' in item:
+                    a,b = item.split("=", maxsplit=1)
+                    clauses[a] = b
+                else:
+                    raise GrewError(f"Cannot build Fs_edge with data: {s}")
+            return clauses
+        else: # s is parsed following config
+            clauses = dict()
+            for key,separator in reversed(sud_config[1].items()):
+                if separator in s:
+                    s,v = s.rsplit(separator, 1)
+                    clauses[key] = v
+            clauses[sud_config[0]] = s
+            return clauses
+
+
 class Graph():
     """
     a dict mapping node keys to feature structure
