@@ -59,14 +59,9 @@ class Fs_edge(dict):
         sud style
         """
         self_keys = set(self.keys())
-        config_keys = set(sud_config[1].keys())
-        config_keys.add (sud_config[0])
-        if self_keys.issubset(config_keys):
-            s = self[sud_config[0]]
-            for k,separator in sud_config[1].items():
-                if k in self:
-                    s = f"{s}{separator}{self[k]}"
-            return s
+        if self_keys.issubset(set(sud_config[1].keys()) | {sud_config[0]}):
+            s = "".join(f"{sep}{self[k]}" for k, sep in sud_config[1].items() if k in self)
+            return f"{self.get(sud_config[0],"")}{s}"
         else:
             return str(self)
 
