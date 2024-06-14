@@ -213,7 +213,7 @@ class Graph():
         return {"nodes" : nds, "edges" : edg_list, "order": self.order, "meta" : self.meta }
 
     def __str__(self):
-        return f"({str(self.features)}, {str(self._sucs)})" # TODO order, meta
+        return json.dumps(self.json_data(), indent=2)
 
     def to_conll(self):
         """
