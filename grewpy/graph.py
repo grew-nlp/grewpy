@@ -189,19 +189,6 @@ class Graph():
 
     sucs = property(_gsucs, _ssucs, _dsucs, "successor relation")
 
-    def to_dot(self): # TODO fix it
-        """
-        return a string in dot/graphviz format
-        """
-        s = 'digraph G{\n'
-        for n,fs in self.features.items():
-            s += f'{n}[label="'
-            label = ["%s:%s" % (f,v.replace('"','\\"')) for f, v in fs.items()]
-            s += ",".join(label)
-            s += '"];\n'
-        s += "\n".join([f'{n} -> {m}[label="{e}"];' for n,suc in self._sucs.items() for e,m in suc])
-        return s + '\n}'
-
     def json_data(self):
         nds = {c:self[c] for c in self.features}
         edg_list = []
@@ -221,6 +208,15 @@ class Graph():
         """
         data = self.json_data()
         req = {"command": "graph_to_conll", "graph": data}
+        reply = send_and_receive(req)
+        return reply
+
+    def to_dot(self):
+        """
+        return a CoNLL string for the given graph
+        """
+        data = self.json_data()
+        req = {"command": "graph_to_dot", "graph": data}
         reply = send_and_receive(req)
         return reply
 
