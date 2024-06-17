@@ -61,7 +61,7 @@ class Fs_edge(dict):
         self_keys = set(self.keys())
         if self_keys.issubset(set(sud_config[1].keys()) | {sud_config[0]}):
             s = "".join(f"{sep}{self[k]}" for k, sep in sud_config[1].items() if k in self)
-            return f"{self.get(sud_config[0],"")}{s}"
+            return f"{self.get(sud_config[0],'')}{s}"
         else:
             return str(self)
 
