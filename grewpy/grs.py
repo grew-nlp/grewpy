@@ -53,8 +53,8 @@ class RequestItem():
         return cls(k,v)
 
     def __str__(self):
-        its = ";".join([str(x) for x in self.items])
-        return f"{self.sort} {{{its}}}"
+        its = "; ".join([str(x) for x in self.items])
+        return f"{self.sort} {{ {its} }}"
 
     def __repr__(self):
         return f"{self.sort} {{{ ';'.join([str(x) for x in self.items]) }}}"

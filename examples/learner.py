@@ -117,7 +117,7 @@ def zero_knowledge_learning(gold, corpus_empty, request, args, param):
     currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
     print(diff_by_edge_value(currently_computed_corpus, draft))
-    if args.web:
+    if True:
         web = grew_web.Grew_web()
         print(web.url())
         web.load_corpus(corpus_empty)

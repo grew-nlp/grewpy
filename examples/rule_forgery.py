@@ -50,7 +50,7 @@ def nkv2req(n):
         value = '\\"'
     return f'{m}[{feat}="{value}"]'
 
-def build_request(T, n, back, request_nodes, request, idx2nkv, details):
+def build_request(clf, n, back, request_nodes, request, idx2nkv, details):
     """
     build a request corresponding to a node n
     within the decision tree T
@@ -58,38 +58,70 @@ def build_request(T, n, back, request_nodes, request, idx2nkv, details):
     request is the base request of the sketch
     if args.branch_details, we do not simplify the request
     """
+    T = clf.tree_
     req = Request(request)  # builds a copy 
     root2n = classifier.branch(n, back) #
-    criterions = [ (idx2nkv[T.feature[n]], r) for n,r in root2n]
+    criterions = [ (n, idx2nkv[T.feature[n]], r) for n,r in root2n]
     if details:
-        for n,r in criterions:
-            if r: req.with_(nkv2req(n))
-            else: req.without(nkv2req(n))
+        for _,c,r in criterions:
+            if r: req.with_(nkv2req(c))
+            else: req.without(nkv2req(c))
         return req
 
-    positives = [n for n,r in criterions if r]
-    negatives = [n for n,r in criterions if not r]
-    positive_features = {(nkv[0],nkv[1][0]) : nkv[1][1] for nkv in positives if isinstance(nkv,tuple)}
-    positive_order = [nkv for nkv in positives if isinstance(nkv, str)]
-    negative_features = [nkv for nkv in negatives if isinstance(nkv,tuple)]
+    positives = [(n,c) for n,c,r in criterions if r]
+    negatives = [(n,c) for n,c,r in criterions if not r]
+    positive_features = {(nkv[0],nkv[1][0]) : nkv[1][1] for _,nkv in positives if isinstance(nkv,tuple)}
+    positive_order = [(n,nkv) for n,nkv in positives if isinstance(nkv, str)]
+    negative_features = [nkv for _,nkv in negatives if isinstance(nkv,tuple)]
     #now remove X[Gen=Masc] without {X[Gen=Fem]}
     good_negatives = [(m,(f,v)) for (m,(f,v)) in negative_features if (m,f) not in positive_features]
-    negative_order = [nkv for nkv in negatives if isinstance(nkv, str)]
+    negative_order = [(n,nkv) for n,nkv in negatives if isinstance(nkv, str)]
 
     if positive_order:
-        req.append("pattern", ";".join(positive_order))
+        for n,nkv in positive_order:
+            if '<' in nkv:
+                req.pattern(nkv)
+            elif 'delta' in nkv:
+                zz = nkv.split("_")
+                N1,N2=zz[1],zz[2]
+                tt = int(T.threshold[n]-0.5)
+                req.pattern(f"{N1}[];{N2}[];delta({N1},{N2}) > {tt}")
+            elif 'left' in nkv:
+                z = nkv.split("_")[2]
+                tt = int(T.threshold[n]-0.5)
+                req.pattern(f"A[!upos];{z}[];delta(A,{z}) > {tt}")
+            else:
+                z = nkv.split("_")[2]
+                tt = int(T.threshold[n]-1.5)
+                req.pattern(f"E$[];{z}[];delta({z},E$) >= {tt}")
+                req.without("Z$[]; E$ < Z$")
     for n in request_nodes:
         nf = {k for (m,k) in positive_features if m==n}
         if nf:
             xf = ",".join( f'''{k}="{positive_features[(n,k)]}"''' for k in nf)
             req.append("pattern", f'{n}[{xf}]')
-    for t in negative_order:
-        req.without(t)
+    for n,nkv in negative_order:
+        if '<' in nkv:
+            req.without( nkv)
+        elif 'delta' in nkv:
+            zz = nkv.split("_")
+            N1,N2=zz[1],zz[2]
+            tt = int(T.threshold[n]-0.5)
+            req.pattern(f"{N1}[];{N2}[];delta({N1},{N2}) <= {tt}")
+        elif 'left' in nkv:
+            z = nkv.split("_")[2]
+            tt = int(T.threshold[n]-0.5)
+            req.pattern(f"A[!upos];{z}[];delta(A,{z}) <= {tt}")
+        else:
+            z = nkv.split("_")[2]
+            tt = int(T.threshold[n]-1.5)
+            req.pattern(f"E$[];{z}[];delta({z},E$) < {tt}")
+            req.without("Z$[];E$ < Z$")
     for n,(k,v) in good_negatives:
         req.without(f'{n}[{k}="{v}"]')
     return req
 
-def patterns(T, idx2nkv, request, nodes, param, y0, details):
+def patterns(clf, idx2nkv, request, nodes, param, y0, details):
     """
     list of patterns reaching prediction y0 within T
     """
@@ -99,8 +131,10 @@ def patterns(T, idx2nkv, request, nodes, param, y0, details):
         g = T.children_left[n]
         d = T.children_right[n]
         return loop(g) + loop(d)
+    T = clf.tree_
     back = classifier.back_tree(T)
-    return [build_request(T, n, back,  nodes, request, idx2nkv, details) for n in loop(0)]
+    res = [build_request(clf, n, back,  nodes, request, idx2nkv, details) for n in loop(0)]
+    return res
 
 def order_constraints(nodes):
     """
@@ -109,7 +143,10 @@ def order_constraints(nodes):
     """
     S1 = {f"{p}<{q}"  for p,q in itertools.permutations(nodes,2)}
     S2 = {f"{p}<<{q}" for p,q in itertools.permutations(nodes,2) if p < q}
-    return S1 | S2
+    S3 = {f"delta_{p}_{q}" for p,q in itertools.permutations(nodes,2) if p < q}
+    S4 = {f"left_pos_{p}" for p in nodes}
+    S5 = {f"right_pos_{p}" for p in nodes}
+    return S1 | S2 | S3 | S4 | S5
 
 def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
     """
@@ -142,11 +179,17 @@ def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
     
     positions = {b : int(a) for a,b in X2Name}
     for n1,n2 in itertools.permutations(positions.keys(), 2):
-        n12, n1_2 = f'{n1}<{n2}',f'{n1}<<{n2}'
+        n12, n1_2, delta_n1_n2 = f'{n1}<{n2}',f'{n1}<<{n2}', f'delta_{n1}_{n2}'
         if n12 in order_idx:
             X[(cpt, order_idx[n12])] = 1 if positions[n1] - positions[n2] == -1 else 0
         if n1_2 in order_idx:
             X[(cpt, order_idx[n1_2])] = 1 if positions[n1] < positions[n2] else 0
+        if delta_n1_n2 in order_idx:
+            X[(cpt, order_idx[delta_n1_n2])] = positions[n2] - positions[n1]
+    for a,b in X2Name:
+        X[(cpt,order_idx[f'left_pos_{b}'])] = int(a)
+        #X[(cpt,order_idx[f'right_pos_{b}'])] = len(graph) - int(a)
+        
     Xn2id = {Xn : Xid for Xid,Xn in X2Name}
     e = graph.edge(Xn2id['X'], Xn2id['Y'])
     y[cpt] = edge_idx[e]
@@ -221,7 +264,7 @@ def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,nodes,param, 
                                  max_depth=depth)
     print("learning")
     clf.fit(X, y == dependency)
-    requests = patterns(clf.tree_, idx2nkv, request, nodes, param, 1, details) #1=good outcome
+    requests = patterns(clf, idx2nkv, request, nodes, param, 1, details) #1=good outcome
     return requests, clf
 
 """
