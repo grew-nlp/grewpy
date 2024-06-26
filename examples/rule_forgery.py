@@ -50,7 +50,7 @@ def nkv2req(n):
         value = '\\"'
     return f'{m}[{feat}="{value}"]'
 
-def build_request(clf, n, back, request_nodes, request, idx2nkv, details):
+def build_request(clf, n, back, named_entities, request, idx2nkv, edge_idx, details):
     """
     build a request corresponding to a node n
     within the decision tree T
@@ -90,12 +90,14 @@ def build_request(clf, n, back, request_nodes, request, idx2nkv, details):
                 z = nkv.split("_")[2]
                 tt = int(T.threshold[n]-0.5)
                 req.pattern(f"A[!upos];{z}[];delta(A,{z}) > {tt}")
+            elif 'edge' in nkv:
+                zz = nkv.split("_")
+                f, e_idx = zz[1], int(zz[2])
+                req.pattern(f'{f}.label={edge_idx[e_idx]}')
             else:
-                z = nkv.split("_")[2]
-                tt = int(T.threshold[n]-1.5)
-                req.pattern(f"E$[];{z}[];delta({z},E$) >= {tt}")
-                req.without("Z$[]; E$ < Z$")
-    for n in request_nodes:
+                raise NotImplementedError(f"{n, nkv}")
+            
+    for n in named_entities["nodes"]:
         nf = {k for (m,k) in positive_features if m==n}
         if nf:
             xf = ",".join( f'''{k}="{positive_features[(n,k)]}"''' for k in nf)
@@ -112,16 +114,18 @@ def build_request(clf, n, back, request_nodes, request, idx2nkv, details):
             z = nkv.split("_")[2]
             tt = int(T.threshold[n]-0.5)
             req.pattern(f"A[!upos];{z}[];delta(A,{z}) <= {tt}")
+        elif 'edge' in nkv:
+                zz = nkv.split("_")
+                f, e_idx = zz[1], int(zz[2])
+                req.without(f"{f}.label={edge_idx[e_idx]}")
         else:
-            z = nkv.split("_")[2]
-            tt = int(T.threshold[n]-1.5)
-            req.pattern(f"E$[];{z}[];delta({z},E$) < {tt}")
-            req.without("Z$[];E$ < Z$")
+            raise NotImplementedError(f"{n, nkv}")
+
     for n,(k,v) in good_negatives:
         req.without(f'{n}[{k}="{v}"]')
     return req
 
-def patterns(clf, idx2nkv, request, nodes, param, y0, details):
+def patterns(clf, idx2nkv, request, named_entities, edge_idx, param, y0, details):
     """
     list of patterns reaching prediction y0 within T
     """
@@ -133,7 +137,7 @@ def patterns(clf, idx2nkv, request, nodes, param, y0, details):
         return loop(g) + loop(d)
     T = clf.tree_
     back = classifier.back_tree(T)
-    res = [build_request(clf, n, back,  nodes, request, idx2nkv, details) for n in loop(0)]
+    res = [build_request(clf, n, back,  named_entities, request, idx2nkv, edge_idx, details) for n in loop(0)]
     return res
 
 def order_constraints(nodes):
@@ -148,15 +152,16 @@ def order_constraints(nodes):
     S5 = {f"right_pos_{p}" for p in nodes}
     return S1 | S2 | S3 | S4 | S5
 
-def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
+def nkv(corpus, skipped_features, named_entities, edge_idx, max_feature_values=50):
     """
-    given a corpus, return the dictionnary  nkv -> index and indexes for order constraints
+    given a corpus, return the dictionnary  nkv -> index
     an nkv is either 
     a triple (n,k,v)
     - n in ('X', 'Y', ...)
     - k in ('Gen', 'upos', ...)
     - v in ('Fem', 'Det', ...)
     or nkv is an order constraint: nkv = "X << Y"
+    or nkv is an edge label
     for each nk, we keep only max_feature_values 
     pattern_nodes = (X, Y, ...) list of nodes
     """
@@ -166,13 +171,18 @@ def nkv(corpus, skipped_features, pattern_nodes, max_feature_values=50):
         T = sorted([(occ,v) for v, occ in vocc.items()], reverse=True)
         feat_values_set |= {(k,v) for _,v in  T[:max_feature_values]}
     
-    nkv = itertools.product(pattern_nodes, feat_values_set)
-    nkv = set(nkv) | order_constraints(pattern_nodes)
+    nkv = itertools.product(named_entities["nodes"], feat_values_set)
+    nkv = set(nkv) | order_constraints(named_entities["nodes"])
+    for f in named_entities["edges"]:
+        nkv |= {f'edge_{f}_{idx}' for idx in edge_idx.values()}
     nkv_idx = classifier.e_index(nkv)
     order_idx = {k : v for k,v in nkv_idx.items() if isinstance(k,str)} #list of order constraints 
     return nkv_idx, order_idx
 
-def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
+def edge_XY(graph, X2Name, edges, cpt, edge_idx, nkv_idx, X, y, order_idx):
+    """
+    for each match in the corpus, we fill X and y accordingly
+    """
     for Xid, Xname in X2Name:
         for k,v in graph[Xid].items():
             if (Xname,(k,v)) in nkv_idx: X[(cpt,nkv_idx[(Xname,(k,v))])] += 1
@@ -189,13 +199,15 @@ def edge_XY(graph, X2Name, cpt, edge_idx, nkv_idx, X, y, order_idx):
     for a,b in X2Name:
         X[(cpt,order_idx[f'left_pos_{b}'])] = int(a)
         #X[(cpt,order_idx[f'right_pos_{b}'])] = len(graph) - int(a)
-        
+    for f in edges:
+        X[(cpt,order_idx[f'edge_{f}_{edges[f]}'])] = 1
+
     Xn2id = {Xn : Xid for Xid,Xn in X2Name}
     e = graph.edge(Xn2id['X'], Xn2id['Y'])
     y[cpt] = edge_idx[e]
     return cpt+1
 
-def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ratio=0):
+def build_Xy(gold, corpus, request, named_entities, edge_idx, nkv_idx, order_idx, ratio=0):
     """
     prepare data for learning
     corpus: from which patterns are extracted
@@ -225,8 +237,11 @@ def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ra
     cpt = 0
     for match in positives:
         graph = corpus[match['sent_id']]
-        nodes = [(match["matching"]["nodes"][n],n) for n in free_nodes]
-        cpt = edge_XY(graph, nodes, cpt, edge_idx, nkv_idx, X, y, order_idx)
+        nodes = [(match["matching"]["nodes"][n],n) for n in named_entities["nodes"]]
+        edges = {
+            f : edge_idx [ Fs_edge( match["matching"]["edges"][f]["label"] )]
+            for f in named_entities["edges"]}
+        cpt = edge_XY(graph, nodes, edges, cpt, edge_idx, nkv_idx, X, y, order_idx)
     if ratio == 0:
         selection = negatives
     else:
@@ -234,27 +249,27 @@ def build_Xy(gold, corpus, request, free_nodes, edge_idx, nkv_idx, order_idx, ra
         selection = random.choices(negatives, weights=weights, k=N-cpt)
     for match in selection:
         graph = corpus[match['sent_id']]
-        nodes = [(match["matching"]["nodes"][n],n) for n in free_nodes]
-        cpt = edge_XY(graph, nodes, cpt, edge_idx, nkv_idx, X, y, order_idx)
+        nodes = [(match["matching"]["nodes"][n],n) for n in named_entities["nodes"]]
+        edges = {f :edge_idx [ Fs_edge(match["matching"]["edges"][f]["label"]) ] for f in named_entities["edges"]}
+        cpt = edge_XY(graph, nodes, edges, cpt, edge_idx, nkv_idx, X, y, order_idx)
     return X,y
 
-def observations(corpus_gold : Corpus,request : Request, nodes, param):
+def observations(corpus_gold : Corpus, draft_gold : CorpusDraft, request : Request, named_entitites, param):
     """
     for each sample corresponding to the request, 
     return X[(sample,nkv)] -> 0/1 if nkv in sample
     and y[sample] = edge index
     """
-    draft = CorpusDraft(corpus_gold)
     skipped_features = param['skipped_features']
     edges = {Fs_edge(x) for x in corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]).keys()} | {None}
     #None for no dependency
     edge_idx = classifier.e_index(edges)
     print("preprocessing")
-    nkv_idx, order_idx = nkv(corpus_gold, skipped_features, nodes)
-    X,y = build_Xy(corpus_gold,draft, request, nodes, edge_idx, nkv_idx, order_idx, param['ratio'])
-    return draft,X,y,edge_idx,nkv_idx
+    nkv_idx, order_idx = nkv(corpus_gold, skipped_features, named_entitites, edge_idx)
+    X,y = build_Xy(corpus_gold,draft_gold, request, named_entitites, edge_idx, nkv_idx, order_idx, param['ratio'])
+    return X,y,edge_idx,nkv_idx
 
-def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,nodes,param, depth, details):
+def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,named_entitites, idx_2_edge, param, depth, details):
     """
     build a decision tree classifier for the `dependency`
     with respect to observations `X`, `y`
@@ -262,9 +277,9 @@ def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,nodes,param, 
     clf = DecisionTreeClassifier(criterion="entropy", 
                                  min_samples_leaf=param["min_samples_leaf"], 
                                  max_depth=depth)
-    print("learning")
+    print(f"learning {idx_2_edge[dependency]}")
     clf.fit(X, y == dependency)
-    requests = patterns(clf, idx2nkv, request, nodes, param, 1, details) #1=good outcome
+    requests = patterns(clf, idx2nkv, request, named_entitites, idx_2_edge, param, 1, details) #1=good outcome
     return requests, clf
 
 """

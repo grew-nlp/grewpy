@@ -64,6 +64,14 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", ver
                 corpus[sid] = g
     return corpus
 
+def clean_corpus(corpus, gold):
+    """
+    remove edges from corpus that are not present in gold
+    """
+    for sid in corpus:
+        for n in corpus[sid].sucs:
+            corpus[sid].sucs[n] = [e for e in corpus[sid].sucs[n] if n in gold[sid].sucs and e in gold[sid].sucs[n]]
+
 def diff_by_edge_value(corpus_gold, corpus):
     def filter(E,e):
         return {(m,n) for m,f,n in E if f == e}
@@ -96,32 +104,35 @@ def append_delete_head(grs : GRSDraft):
     return grs
 
 
-def zero_knowledge_learning(gold, corpus_empty, request, args, param):
-    nodes = request.named_entities()['nodes']
-    draft, X, y, edge_idx, nkv_idx = observations(gold, request, nodes, param)
+def zero_knowledge_learning(gold, corpus, request, args, param):
+    """
+    first compute rules, bundled within package, 
+    then apply rules to corpus, 
+    return the computed (cleaned with respect to gold) corpus and the package
+    """
+    named_entities = request.named_entities() #both nodes and edge names in the request
+    gold_draft = CorpusDraft(corpus_gold)
+    X, y, edge_idx, nkv_idx = observations(gold, gold_draft, request, named_entities, param)
+    idx_edge = {v : k.compact() for (k,v) in edge_idx.items() if k != None}
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     rules = []
     for dependency in edge_idx:
-        if dependency != None:
+        if dependency != None and len(y)>0:
             dep = edge_idx[dependency]
-            requests, _ = clf_dependency(dep,X,y,idx2nkv,request,('X','Y'),param,args.depth,False)
+            requests, _ = clf_dependency(dep,X,y,idx2nkv,request,named_entities, idx_edge, param,args.depth, False)
             rules += [Rule(Request(req).pattern('Y[head="1"]'),Commands(Add_edge('X',dependency,'Y'))) for req in requests]
     
     named_rules = Package({f'r{i}' : rules[i] for i in range(len(rules))})
     rules_with_head = append_delete_head(named_rules)
-    grsd = GRSDraft({'Simple' : Package(rules_with_head), 'main' : 'Onf(Simple)'})
-    if args.rules:
-        grsd.save(args.rules)
-    grs = GRS(grsd)
+    package = Package(rules_with_head)
+    grs = GRS({f'Simple' : package, 'main' : 'Onf(Simple)'})
     print("testing")
-    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, grs, args.verbose)
+    currently_computed_corpus = get_best_solution(corpus_gold, corpus, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-    print(diff_by_edge_value(currently_computed_corpus, draft))
-    if True:
-        web = grew_web.Grew_web()
-        print(web.url())
-        web.load_corpus(corpus_empty)
-        web.load_grs(grs)
+    print(diff_by_edge_value(currently_computed_corpus, gold_draft))
+    #clean the input corpus
+    clean_corpus(currently_computed_corpus, gold_draft)
+    return currently_computed_corpus, package
 
 
 if __name__ == "__main__":
@@ -160,8 +171,21 @@ if __name__ == "__main__":
     print(f"""number of edges within corpus: {corpus_gold.count(Request('pattern{e: X -> Y}'))}""")
     print(f"number of adjacent relations: {A}")
     print(corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]))
-    zero_knowledge_learning(corpus_gold, corpus_empty, Request('pattern{X[];Y[]}'),args, param)
-
+    corpus1, package_1 = zero_knowledge_learning(corpus_gold, corpus_empty, Request('pattern{X[];Y[]}'),args, param)
+    corpus2, package_2 = zero_knowledge_learning(corpus_gold, corpus1, Request('pattern{X[];Y[];Z[];f:X->Z}'),args, param)
+    corpus3, package_3 = zero_knowledge_learning(corpus_gold, corpus2, Request('pattern{X[];Y[];Z[];f:Z->X}'),args, param)
+    corpus4, package_4 = zero_knowledge_learning(corpus_gold, corpus3, Request('pattern{X[];Y[];Z[];f:Y->Z}'),args, param)
+    corpus5, package_5 = zero_knowledge_learning(corpus_gold, corpus4, Request('pattern{X[];Y[];Z[];f:Z->Y}'),args, param)
+    if args.rules:
+        grsd = GRSDraft({ 'P1' : package_1, 'P2' : package_2, 'P3' : package_3, 'P4' : package_4, 'P5' : package_5, 'main' : 'Seq(Onf(P1),Onf(P2),Onf(P3),Onf(P4),Onf(P5))'})
+        grsd.save(args.rules)
+    if args.web:
+        grsd = GRSDraft({ 'P1' : package_1, 'P2' : package_2, 'P3' : package_3, 'P4' : package_4, 'P5' : package_5, 'main' : 'Seq(Onf(P1),Onf(P2),Onf(P3),Onf(P4),Onf(P5))'})
+        grs = GRS(grsd)
+        web = grew_web.Grew_web()
+        print(web.url())
+        web.load_corpus(corpus_empty)
+        web.load_grs(grs)
 
 """
 
