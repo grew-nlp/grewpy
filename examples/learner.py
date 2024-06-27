@@ -1,39 +1,41 @@
 import math
 import numpy as np
-import re
 import argparse
 import pickle
-from dataclasses import dataclass
+from typing import List, Union
 
-from rule_forgery import WorkingGRS, observations, clf_dependency
+from rule_forgery import observations, clf_dependency
 # Use local grew lib
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))) 
 
-from grewpy import Request, Rule, Commands, Command, Add_edge, GRSDraft, CorpusDraft, Package, Delete_feature
+from grewpy import Request, Rule, Commands, Command, Add_edge, Delete_feature
 from grewpy import Corpus, GRS, set_config
+from grewpy import GRSDraft, CorpusDraft, Package, Graph
 from grewpy import grew_web
 from grewpy.graph import Fs_edge
 
-def add_rule_name(wgrs):
-    for rn in wgrs:
-        wgrs[rn].commands.append(Command(f'Y.rule="{rn}"'))
+def add_rule_name(wgrs : List[Rule]):
+    """
+    add the name of the applied rule to node Y
+    """
+    for rn in wgrs: wgrs[rn].commands.append(Command(f'Y.rule="{rn}"'))
 
-def clear_but_working(g):
+def clear_but_working(g : Graph):
     """
     delete non working edges within g
     """
     g.sucs = {n : [] for n in g.sucs}
     return (g)
 
-def append_head(g):
+def append_head(g : Graph):
     """
     each node in g get a head feature = 1
     """
     for n in g: g[n]['head']='1'
     return g
 
-def basic_edges(g):
+def basic_edges(g : Graph):
     """
     change edges {1:comp, 2:obl} to {1:comp}
     """
@@ -45,7 +47,7 @@ def basic_edges(g):
 
 def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", verbose=0) -> CorpusDraft:
     """
-    grs is a GRSDraft
+    grs is a GRS
     return the best solution using the grs with respect to the gold corpus
     the grs does not need to be confluent. We take the best solution with 
     respect to the f-score
@@ -64,7 +66,7 @@ def get_best_solution(corpus_gold, corpus_start, grs : GRS, strategy="main", ver
                 corpus[sid] = g
     return corpus
 
-def clean_corpus(corpus, gold):
+def clean_corpus(corpus : CorpusDraft, gold : Union[Corpus, CorpusDraft]):
     """
     remove edges from corpus that are not present in gold
     """
@@ -72,7 +74,11 @@ def clean_corpus(corpus, gold):
         for n in corpus[sid].sucs:
             corpus[sid].sucs[n] = [e for e in corpus[sid].sucs[n] if n in gold[sid].sucs and e in gold[sid].sucs[n]]
 
-def diff_by_edge_value(corpus_gold, corpus):
+def diff_by_edge_value(corpus_gold, corpus) -> dict:
+    """
+    return for each edge value (e.g. subj) the difference between gold and corpus
+    difference is given as a triple (common, only left, only right)
+    """
     def filter(E,e):
         return {(m,n) for m,f,n in E if f == e}
     res = dict()
@@ -94,13 +100,19 @@ def diff_by_edge_value(corpus_gold, corpus):
     return res
 
 def prepare_corpus(filename):
+    """
+    builds two corpora : one for which each node is head (has no known father)
+    and an empty corpus
+    """
     corpus = Corpus(CorpusDraft(filename).apply(append_head))
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     return corpus, empty
 
 def append_delete_head(grs : GRSDraft):
-    for rn in grs:
-        grs[rn].commands.append(Delete_feature("Y", "head"))
+    """
+    When a node got its father, we remove its head feature
+    """
+    for rn in grs: grs[rn].commands.append(Delete_feature("Y", "head"))
     return grs
 
 
@@ -159,12 +171,15 @@ if __name__ == "__main__":
         "node_impurity": 0.15,
         "threshold" : args.threshold,
         "tree_depth" : args.depth,
-        "ratio" : 10
+        "ratio" : 20
     }
     corpus_gold, corpus_empty = prepare_corpus(args.train)
     if args.nodetails:
         corpus_gold = Corpus(CorpusDraft(corpus_gold).apply(basic_edges))
     
+    #web = grew_web.Grew_web()
+    #print(web.url())
+
     A = corpus_gold.count(Request('pattern{X<Y;e:X->Y}'))
     A += corpus_gold.count(Request('pattern{Y<X;e:X->Y}'))
     print("---target----")
@@ -175,184 +190,21 @@ if __name__ == "__main__":
     corpus2, package_2 = zero_knowledge_learning(corpus_gold, corpus1, Request('pattern{X[];Y[];Z[];f:X->Z}'),args, param)
     corpus3, package_3 = zero_knowledge_learning(corpus_gold, corpus2, Request('pattern{X[];Y[];Z[];f:Z->X}'),args, param)
     corpus4, package_4 = zero_knowledge_learning(corpus_gold, corpus3, Request('pattern{X[];Y[];Z[];f:Y->Z}'),args, param)
-    corpus5, package_5 = zero_knowledge_learning(corpus_gold, corpus4, Request('pattern{X[];Y[];Z[];f:Z->Y}'),args, param)
+    corpus5, package_5 = zero_knowledge_learning(corpus_gold, corpus4, Request('pattern{X[];Y[];Z[];U[];f:Y->Z;g:X->U}'),args, param)
+    corpus6, package_6 = zero_knowledge_learning(corpus_gold, corpus5, Request('pattern{X[];Y[];Z[];U[];f:Y->Z;g:U->X}'),args, param)
+    pckags = [package_1, package_2, package_3, package_4, package_5, package_6]
+
+    pkg_list = ','.join(f"Onf(P{i+1})" for i in range(6))
+    grsd = GRSDraft({ f'P{i+1}' : pckags[i] for i in range(len(pckags))} | {'main' : f'Seq({pkg_list})'})
+    grs = GRS(grsd)
+    final_corpus = get_best_solution(corpus_gold, corpus6, grs, args.verbose)
+    print(final_corpus.edge_diff_up_to(corpus_gold))
+    print(diff_by_edge_value(final_corpus, corpus_gold))
     if args.rules:
-        grsd = GRSDraft({ 'P1' : package_1, 'P2' : package_2, 'P3' : package_3, 'P4' : package_4, 'P5' : package_5, 'main' : 'Seq(Onf(P1),Onf(P2),Onf(P3),Onf(P4),Onf(P5))'})
         grsd.save(args.rules)
     if args.web:
-        grsd = GRSDraft({ 'P1' : package_1, 'P2' : package_2, 'P3' : package_3, 'P4' : package_4, 'P5' : package_5, 'main' : 'Seq(Onf(P1),Onf(P2),Onf(P3),Onf(P4),Onf(P5))'})
+        web = grew_web.Grew_web()
+        print(web.url())
+        web.load_corpus(corpus_empty)
         grs = GRS(grsd)
-        web = grew_web.Grew_web()
-        print(web.url())
-        web.load_corpus(corpus_empty)
         web.load_grs(grs)
-
-"""
-
-def edge_is(e,f):
-    '''
-    tells whether e is an f
-    '''
-    for k in e:
-        if k not in f or e[k] not in f[k]:
-            return False
-    return True
-
-def corpus_diff(c1,c2):
-    c,l,r = 0,0,0
-    for sid in c1:
-        men = {m: (e, n) for n, e, m in c1[sid].triples()}
-        menp = {m : (e,n) for n,e, m in c2[sid].triples()}
-        S1 = set(men.keys())
-        S2 = set(menp.keys())
-        l += len(S1 - S2)
-        r += len(S2 - S1)
-        for m in S1 & S2:
-            e,n = men[m]
-            ep,np = menp[m]
-            if n != np or not edge_is(ep,e):
-                l,r = l+1,r+1
-            else:
-                c += 1
-    precision = c / (c + l+1e-10)
-    recall = c / (c + r+1e-10)
-    f_measure = 2*precision*recall / (precision+recall+1e-10)
-    return {
-        "common": c,
-        "left": l,
-        "right": r,
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f_measure": round(f_measure, 3),
-    }
-def node_to_rule(n : int, e , back, T, request : Request, idx2nkv, idx2e, param, known_nodes):
-    while n: #find the shortest path leading to e with impurity lower than threshold, we start with a leaf, so we go to the root
-        father = back[n][1]
-        ef = idx2e[np.argmax(T.value [ father ] )] #prevalent edge of the father
-        if ef is None or ef != e:
-            break
-        if T.impurity[father] > param['node_impurity']:
-            break
-        n = father
-    if not n:
-        return []
-    if n in known_nodes: #this node has been seen in the past, no rules is synthesized
-        return []
-    known_nodes.add(n)
-    request = Request(request)  # builds a copy 
-    while n != 0: #0 is the root node
-        right, n = back[n]
-        Z = idx2nkv[T.feature[n]]
-        if isinstance(Z, tuple): #it is a feature pattern
-            m, feat, feat_value = Z
-            feat_value = feat_value.replace('"', '\\"')
-            Z = f'{m}[{feat}="{feat_value}"]'
-        if right:
-            request.append("pattern", Z)
-        else:
-            request.without(Z)                    
-    rule = Rule(request, Commands(Add_edge("X", e, "Y")))
-    return [rule]
-
-def decision_tree_to_rules(T, idx2e, idx2nkv, request, param):
-    back, leaves = back_tree(T)
-    known_nodes = set()
-    res = []
-    for n in leaves:
-        e = idx2e[np.argmax( T.value[n])]
-        if e and T.impurity[n] < param['node_impurity']:
-            res += node_to_rule(n, e, back, T, request, idx2nkv, idx2e, param, known_nodes)
-    return res
-
-def forbidden_patterns(T, idx2e, idx2nkv, request, param):
-    back, leaves = back_tree(T)
-    internal_node = set()
-    empty_patterns = []
-    for n in leaves:
-        if not idx2e[np.argmax(T.value[n])]:
-            while n and back[n][1] and T.impurity[ back[n][1] ] <= 0.0001:
-                n = back[n][1]
-            if n and n not in internal_node and T.impurity[ n ] <= 0.0001:
-                internal_node.add(n)
-                req = Request(request)  # builds a copy 
-                while n != 0: #0 is the root node
-                    right, n = back[n]
-                    Z = idx2nkv[T.feature[n]]
-                    if isinstance(Z, tuple): #it is a feature pattern
-                        m, feat, feat_value = Z
-                        feat_value = feat_value.replace('"', '\\"')
-                        Z = f'{m}[{feat}="{feat_value}"]'
-                    if right:
-                        req.append("pattern", Z)
-                    else:
-                        req.without(Z)  
-                empty_patterns.append( req)
-    return empty_patterns
-
-    def pack(s):
-    if re.search("f[XYZ]", s):
-        return 3
-    if re.search("intermediate", s):
-        return 2
-    if "enhanced" in s:
-        return 1
-    return 0
-
-def add_rules(draft, xupos, yupos, edges, edge_idx, skipped_features):
-    X,y,W,nkv_idx = build_Xy_by_grew(corpus_gold, draft, Request(f"X[upos={xupos}];Y[upos={yupos}]"),skipped_features, edge_idx) #
-    clf = DecisionTreeClassifier(criterion="gini", 
-                                 min_samples_leaf=param["min_samples_leaf"], 
-                                 max_depth=8,
-                                 class_weight={ edge_idx[e] : edges[e] for e in edges})
-    print("learning")
-    clf.fit(X, y, sample_weight=W)
-    idx2nkv = {v:k for k,v in nkv_idx.items()}
-    idx2e = {v:k for k,v in edge_idx.items()}
-    return decision_tree_to_rules(clf.tree_, idx2e, idx2nkv, Request(f"X[upos={xupos}];Y[upos={yupos},head]"), param)
-    
-
-def standard_learning_process(corpus_gold, corpus_empty, args, param):
-    R0,L0 = adjacent_rules(corpus_gold, param)
-    print(len(L0))
-    R0e = refine_rules(R0, corpus_gold, param)
-    R0e = R0e.safe_rules()
-    add_rule_name(R0e)
-    R0e = append_delete_head(R0e)
-    print(f"number of rules len(R0e) = {len(R0e)}")
-    #turn R0e to a set of packages to speed up the process
-    packages = {f'P{i}' : Package() for i in range(4)}
-    for rn in R0e:
-        packages[f'P{pack(rn)}'][rn] = R0e[rn]
-    R00 = GRSDraft(packages)
-    R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3))"
-    if args.rules:
-        R00.save(args.rules)
-
-    G00 = GRS(R00)
-    if args.web:
-        web = grew_web.Grew_web()
-        print(web.url())
-        web.load_corpus(corpus_empty)
-        web.load_grs(G00)
-
-    currently_computed_corpus = get_best_solution(corpus_gold, corpus_empty, G00, args.verbose)
-    print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-
-    if args.local_rules:
-        loc_rules,_ = local_rules(corpus_gold, param)
-        Rloc = refine_rules(loc_rules, corpus_gold, param)
-        Rloc = Rloc.safe_rules()
-        Rloc = append_delete_head(Rloc)
-        print(f"number of local rules: {len(Rloc)}")
-        packages['P4'] = Package(Rloc)
-        R00 = GRSDraft(packages)
-        R00['main'] = "Seq(Onf(P0),Onf(P1),Onf(P2),Onf(P3),Onf(P4))"
-        currently_computed_corpus = get_best_solution(corpus_gold, currently_computed_corpus, G00, strategy="Onf(P4)")
-        print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-        if args.rules:
-            f = open(args.rules, "w")
-            f.write(str(R00))
-            f.close()
-        print('done')
-
-"""
