@@ -124,7 +124,7 @@ def build_request(clf, n, back, named_entities, request, idx2nkv, edge_idx, deta
             elif 'edge' in nkv:
                 zz = nkv.split("_")
                 f, e_idx = zz[1], int(zz[2])
-                req.pattern(f'{f}.label={edge_idx[e_idx]}')
+                req.pattern(f'{f}.label="{edge_idx[e_idx]}"')
             else:
                 raise NotImplementedError(f"{n, nkv}")
             
@@ -148,7 +148,7 @@ def build_request(clf, n, back, named_entities, request, idx2nkv, edge_idx, deta
         elif 'edge' in nkv:
                 zz = nkv.split("_")
                 f, e_idx = zz[1], int(zz[2])
-                req.without(f"{f}.label={edge_idx[e_idx]}")
+                req.without(f'{f}.label="{edge_idx[e_idx]}"')
         else:
             raise NotImplementedError(f"{n, nkv}")
 
