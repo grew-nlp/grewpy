@@ -44,6 +44,15 @@ def basic_edges(g : Graph):
         g.sucs[n] = tuple((m, remove(e)) for m, e in g.sucs[n])
     return g
 
+def complete_by_empty(g : Graph):
+    """
+    Build a complete graph containing either the original edge or an 'empty' edge
+    """
+    for n in g.sucs:
+        sucs = [m for (m,e) in g.sucs[n]]
+        g.sucs[n] += [(m, Fs_edge({'1' : "None"})) for m in g if m not in sucs]
+    return g
+
 def merge_udeps(g : Graph):
     udep = Fs_edge({'1' : 'udep'})
     def replace(e): return udep if e['1'] in ('mod','comp') else e 
@@ -110,6 +119,8 @@ def prepare_corpus(filename, details):
         draft = CorpusDraft(corpus).apply(basic_edges)
         if details == 2:
             draft = draft.apply(merge_udeps)
+        if details == 3:
+            draft = draft.apply(complete_by_empty)
         corpus = Corpus(draft)
     empty = Corpus(CorpusDraft(corpus).apply(clear_but_working))
     return corpus, empty
@@ -130,7 +141,9 @@ def learn_rules(gold, corpus, request, edges, args, param):
     """
     named_entities = request.named_entities() #both nodes and edge names in the request
     gold_draft = CorpusDraft(corpus_gold)
-    X, y, edge_idx, nkv_idx = observations(gold, gold_draft, request, named_entities, param)
+    edges = edges + [None] #None for no dependency
+    edge_idx = {edges[i] : i for i in range(len(edges))} #builds a dictionary from the set mapping edges to their index
+    X, y, nkv_idx = observations(gold, gold_draft, request, edge_idx, named_entities, param)
     idx_edge = {v : k.compact() for (k,v) in edge_idx.items() if k != None}
     idx2nkv = {v:k for k,v in nkv_idx.items()}
     rules = []
