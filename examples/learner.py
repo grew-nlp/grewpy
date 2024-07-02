@@ -81,55 +81,24 @@ def clean_corpus(corpus : CorpusDraft, gold : Union[Corpus, CorpusDraft]):
         for n in corpus[sid].sucs:
             corpus[sid].sucs[n] = [e for e in corpus[sid].sucs[n] if n in gold[sid].sucs and e in gold[sid].sucs[n]]
 
-def diff_by_edge_value(corpus_gold, corpus) -> dict:
+def diff_by_edge_value(corpus_gold : Union[Corpus,CorpusDraft], corpus : Union[Corpus,CorpusDraft], edges : List[Fs_edge], is_adjacent = False) -> dict:
     """
     return for each edge value (e.g. subj) the difference between gold and corpus
     difference is given as a triple (common, only left, only right)
+    if is_adjacent: we just verify adjacent nodes
     """
-    def filter(E,e):
-        return {(m,n) for m,f,n in E if f == e}
-    res = dict()
+    res = {e : np.zeros(3, dtype=int) for e in edges}
+    C, L, R = np.array([1,0,0],dtype=int), np.array([0,1,0],dtype=int), np.array([0,0,1],dtype=int)
     for sid in corpus_gold:
-        G1 = corpus_gold[sid]
-        G2 = corpus[sid]
-        E1 = set(G1.triples())
-        E2 = set(G2.triples())
-        edges = {e for (m,e,n) in E1} | {e for (m,e,n) in E2}
-        res = res | {e : (0,0,0) for e in edges - set(res.keys())}
-        for e in edges:
-            c,l,r = res[e]
-            E1e = filter(E1,e)
-            E2e = filter(E2,e)
-            c += len(E1e & E2e)
-            l += len(E1e - E2e)
-            r += len(E2e - E1e)
-            res[e] = (c,l,r)
-    return res
-
-def diff_by_adjacent_edges(corpus1, corpus2) -> dict:
-    def filter(E,e):
-        return {(m,n) for m,f,n in E if f == e}
-    res = {'' : (0,0,0)}
-    for sid in corpus_gold:
-        E1 = set((m,e,n) for (m,e,n) in corpus1[sid].triples() if abs(int(m)-int(n)) == 1)
-        E2 = set((m,e,n) for (m,e,n) in corpus2[sid].triples() if abs(int(m)-int(n)) == 1)
-        edges = {e for (m,e,n) in E1} | {e for (m,e,n) in E2}
-        res = res | {e : (0,0,0) for e in edges - set(res.keys())}
-        for e in edges:
-            c,l,r = res[e]
-            C,L,R = res['']
-            E1e = filter(E1,e)
-            E2e = filter(E2,e)
-            c += len(E1e & E2e)
-            l += len(E1e - E2e)
-            r += len(E2e - E1e)
-            res[e] = (c,l,r)
-            C += len(E1e & E2e)
-            L += len(E1e - E2e)
-            R += len(E2e - E1e)
-            res[''] = (C,L,R)
-    return res
-
+        E1 = set(corpus_gold[sid].triples())
+        E2 = set(corpus[sid].triples())
+        if is_adjacent:
+            E1 = set((m,e,n) for (m,e,n) in E1 if abs(int(m)-int(n)) == 1)
+            E2 = set((m,e,n) for (m,e,n) in E2 if abs(int(m)-int(n)) == 1)
+        for _,e,_ in E1 & E2: res[e] += C
+        for _,e,_ in E1 - E2: res[e] += L
+        for _,e,_ in E2 - E1: res[e]+= R
+    return {e : tuple(res[e]) for e in res}
 
 def prepare_corpus(filename, details):
     """
@@ -153,7 +122,7 @@ def append_delete_head(grs : GRSDraft):
     return grs
 
 
-def zero_knowledge_learning(gold, corpus, request, args, param):
+def learn_rules(gold, corpus, request, edges, args, param):
     """
     first compute rules, bundled within package, 
     then apply rules to corpus, 
@@ -178,11 +147,10 @@ def zero_knowledge_learning(gold, corpus, request, args, param):
     print("testing")
     currently_computed_corpus = get_best_solution(corpus_gold, corpus, grs, args.verbose)
     print(currently_computed_corpus.edge_diff_up_to(corpus_gold))
-    print(diff_by_edge_value(currently_computed_corpus, gold_draft))
+    print(diff_by_edge_value(currently_computed_corpus, gold_draft, edges))
     #clean the input corpus
     clean_corpus(currently_computed_corpus, gold_draft)
     return currently_computed_corpus, package
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='learner.py',
@@ -214,29 +182,44 @@ if __name__ == "__main__":
     
     A = corpus_gold.count(Request('pattern{X<Y;e:X->Y}'))
     A += corpus_gold.count(Request('pattern{Y<X;e:X->Y}'))
-    print(diff_by_adjacent_edges(corpus_gold, corpus_gold))
+    edges = [Fs_edge(e) for e in corpus_gold.count(Request('pattern{e:X->Y}'), ['e.label']).keys()]
+    print(diff_by_edge_value(corpus_gold, corpus_gold, edges, True))
 
+    
     print("---target----")
     print(f"number of edges within corpus: {corpus_gold.count(Request('pattern{e: X -> Y}'))}")
     print(f"number of adjacent relations: {A}")
     print(corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]))
-    corpus1, package_1 = zero_knowledge_learning(corpus_gold, corpus_empty, Request('pattern{X[];Y[];E$[];F$[];G$[];H$[];E$<X;X<F$;G$<Y;Y<H$}'),args, param)
-    corpus2, package_2 = zero_knowledge_learning(corpus_gold, corpus1, Request('pattern{X[];Y[];Z[];f:X->Z;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}'),args, param)
-    corpus3, package_3 = zero_knowledge_learning(corpus_gold, corpus2, Request('pattern{X[];Y[];Z[];f:Z->X;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}'),args, param)
-    corpus4, package_4 = zero_knowledge_learning(corpus_gold, corpus3, Request('pattern{X[];Y[];Z[];f:Y->Z;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}'),args, param)
-    corpus5, package_5 = zero_knowledge_learning(corpus_gold, corpus4, Request('pattern{X[];Y[];Z[];U[];f:Y->Z;g:X->U;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}'),args, param)
-    corpus6, package_6 = zero_knowledge_learning(corpus_gold, corpus5, Request('pattern{X[];Y[];Z[];U[];f:Y->Z;g:U->X}'),args, param)
-    pckags = [package_1, package_2, package_3, package_4, package_5, package_6]
+    sketches = ['pattern{X[];Y[];E$[];F$[];G$[];H$[];E$<X;X<F$;G$<Y;Y<H$}',
+                'pattern{U$[];V$[];X[];Y[];f:U$->V$;U$<<X;X<<V$;U$<<Y;Y<<V$}',
+                'pattern{U$[];V$[];X[];Y[];f:V$->U$;U$<<X;X<<V$;U$<<Y;Y<<V$}',
+                'pattern{X[];Y[];Z[];f:X->Z;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}',
+                'pattern{X[];Y[];Z[];f:Z->X;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}',
+                'pattern{X[];Y[];Z[];f:Y->Z;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}',
+                'pattern{X[];Y[];Z[];U[];f:Y->Z;g:X->U;E$[];F$[];G$[];H$[];I$[];K$[];E$<X;X<F$;G$<Y;Y<H$;I$<Z;Z<K$}',
+                'pattern{X[];Y[];Z[];U[];f:Y->Z;g:U->X}'
+                ]
+    pckags=[]
+    corpus = corpus_empty
+    for sketch in sketches:
+        corpus, package = learn_rules(corpus_gold, corpus, Request(sketch),edges, args, param)
+        pckags.append(package)
 
-    pkg_list = ','.join(f"Onf(P{i+1})" for i in range(6))
+    pkg_list = ','.join(f"Onf(P{i+1})" for i in range(len(pckags)))
     grsd = GRSDraft({ f'P{i+1}' : pckags[i] for i in range(len(pckags))} | {'main' : f'Seq({pkg_list})'})
     grs = GRS(grsd)
-    final_corpus = get_best_solution(corpus_gold, corpus6, grs, args.verbose)
+
+    final_corpus = get_best_solution(corpus_gold, corpus, grs, args.verbose)
+    with open("final_corpus.conllu", "w") as f:
+        f.write(final_corpus.to_conll())
+    
+    final_corpus = CorpusDraft("final_corpus.conllu")
+
     print(final_corpus.edge_diff_up_to(corpus_gold))
     print("---------")
-    print(diff_by_edge_value(final_corpus, corpus_gold))
+    print(diff_by_edge_value(final_corpus, corpus_gold, edges))
     print("------")
-    print(diff_by_adjacent_edges(final_corpus, corpus_gold))
+    print(diff_by_edge_value(final_corpus, corpus_gold,edges, True))
     if args.rules:
         grsd.save(args.rules)
     if args.web:
