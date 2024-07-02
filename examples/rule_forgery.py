@@ -285,20 +285,17 @@ def build_Xy(gold, corpus, request, named_entities, edge_idx, nkv_idx, order_idx
         cpt = edge_XY(graph, nodes, edges, cpt, edge_idx, nkv_idx, X, y, order_idx)
     return X,y
 
-def observations(corpus_gold : Corpus, draft_gold : CorpusDraft, request : Request, named_entitites, param):
+def observations(corpus_gold : Corpus, draft_gold : CorpusDraft, request : Request, edge_idx, named_entitites, param):
     """
     for each sample corresponding to the request, 
     return X[(sample,nkv)] -> 0/1 if nkv in sample
     and y[sample] = edge index
     """
     skipped_features = param['skipped_features']
-    edges = {Fs_edge(x) for x in corpus_gold.count(Request("pattern{e:X->Y}"), ["e.label"]).keys()} | {None}
-    #None for no dependency
-    edge_idx = e_index(edges)
     print("preprocessing")
     nkv_idx, order_idx = nkv(corpus_gold, skipped_features, named_entitites, edge_idx)
     X,y = build_Xy(corpus_gold,draft_gold, request, named_entitites, edge_idx, nkv_idx, order_idx, param['ratio'])
-    return X,y,edge_idx,nkv_idx
+    return X,y,nkv_idx
 
 def clf_dependency(dependency : int, X,y,idx2nkv,request : Request,named_entitites, idx_2_edge, param, depth, details):
     """
