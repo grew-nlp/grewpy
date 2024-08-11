@@ -17,12 +17,12 @@ request_grammar = """
 COMMENT: /%[^\n]*/x
 %ignore COMMENT
 %ignore WS
-SYMBOLS.2 : "-"|"]"|"["|/[<>;,_=.:#@$]/
+SYMBOLS.2 : "-"|"]"|"["|/[\/*!<>;,_=.:#@$|^()]/
 TOKEN : (/\\w/|SYMBOLS)+
-lines : (TOKEN|ESCAPED_STRING)+
+lines : (TOKEN|ESCAPED_STRING)*
 KEYWORDS : "pattern" | "global" | "with" | "without"
 request_item : KEYWORDS "{" lines "}"
-request : request_item+
+request : request_item*
 """
 req_grammar_ = lark.Lark(request_grammar, start="request")
 
