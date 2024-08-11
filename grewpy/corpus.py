@@ -149,6 +149,10 @@ class Corpus(AbstractCorpus):
         req = {"command": "corpus_sent_ids", "corpus_index": self._id}
         return network.send_and_receive(req)
 
+    def get_columns(self):
+        req = {"command": "corpus_columns", "corpus_index": self._id}
+        return network.send_and_receive(req)
+
     def get_id(self):
         """
         return the id of the corpus
