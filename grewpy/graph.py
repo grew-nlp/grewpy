@@ -211,6 +211,15 @@ class Graph():
         reply = send_and_receive(req)
         return reply
 
+    def to_conllup(self, columns=None):
+        """
+        return a CoNLL-U Plus string for the given graph
+        """
+        data = self.json_data()
+        req = {"command": "graph_to_conllup", "graph": data, "columns": columns}
+        reply = send_and_receive(req)
+        return reply
+
     def to_dot(self):
         """
         return a CoNLL string for the given graph
