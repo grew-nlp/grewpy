@@ -94,11 +94,19 @@ class CorpusDraft(AbstractCorpus,dict):
         if isinstance(data, slice):
             return [self[sid] for sid in self._sent_ids[data]]
 
-    def apply(self, fun):
+    def map(self, fun, in_place = False):
         """
-        Apply fun to all graphs, return the new Corpus
+        Apply fun to all graphs, return the new Corpus TODO update
         """
-        return CorpusDraft({sid : fun(self[sid]) for sid in self})
+        if in_place:
+            for sid in self:
+                self[sid] = fun (self[sid])
+        else:
+            return CorpusDraft({sid : fun(self[sid]) for sid in self})
+
+    def apply(self,fun):
+        print ("DEPRECATED, see TODO")
+        return self.map(fun)
 
     def to_conll(self):
         return Corpus(self).to_conll()
@@ -261,7 +269,7 @@ class Corpus(AbstractCorpus):
         return a dict with feature names as key and subdict a value
         for each feature name, the subdict maps existing feature values with the number of occurrences
         if include is set as a list of string, only feature names in the list are taken into account
-        else exclude defines the list of feature names in the list whihc are not taken into account
+        else exclude defines the list of feature names in the list which are not taken into account
         """
         reply = network.send_and_receive({
             "command": "corpus_count_feature_values",

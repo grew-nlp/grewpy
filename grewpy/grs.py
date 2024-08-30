@@ -94,20 +94,16 @@ class Request():
         raise TypeError(f"cannot build a request out of {L}")
         
     def without(self, *L):
-        self.items += tuple(RequestItem("without", e) for e in L)
-        return self
-        
+        return Request (self.items + tuple(RequestItem("without", e) for e in L))
+
     def with_(self, *L):
-        self.items += tuple(RequestItem("with", e) for e in L)
-        return self
-        
+        return Request (self.items + tuple(RequestItem("with", e) for e in L))
+
     def global_(self, *L):
-        self.items += tuple(RequestItem("global", e) for e in L)
-        return self
+        return Request (self.items + tuple(RequestItem("global", e) for e in L))
 
     def pattern(self, *L):
-        self.items += tuple(RequestItem("pattern", e) for e in L)
-        return self
+        return Request (self.items + tuple(RequestItem("pattern", e) for e in L))
 
     @classmethod
     def from_json(cls,json_data):
@@ -203,14 +199,13 @@ class Delete_edge(Command):
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):           
-        return RequestItem("pattern", self.item.replace("add_edge", ""))
+        return RequestItem("pattern", self.item.replace("del_edge", ""))
     
 class Delete_feature(Command):
     def __init__(self, X, f):
         super().__init__(f"del_feat {X}.{f}")
         self.X = X
         self.f = f
-
 
 class Commands(list):
     def __init__(self, *L):
