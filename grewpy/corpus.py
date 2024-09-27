@@ -6,6 +6,8 @@ or by an str (str-graph).
 import os.path
 import glob
 
+import warnings
+
 import sys
 import tempfile
 import json
@@ -96,7 +98,9 @@ class CorpusDraft(AbstractCorpus,dict):
 
     def map(self, fun, in_place = False):
         """
-        Apply fun to all graphs, return the new Corpus TODO update
+        Apply fun to all graphs. 
+        If in_place is False, it returns a new DraftCorpus.
+        If in_place is True, the input corpus is modified, None is returned
         """
         if in_place:
             for sid in self:
@@ -105,7 +109,12 @@ class CorpusDraft(AbstractCorpus,dict):
             return CorpusDraft({sid : fun(self[sid]) for sid in self})
 
     def apply(self,fun):
-        print ("DEPRECATED, see TODO")
+        warnings.warn(
+            "apply() is deprecated and will be removed in a future version."
+            "Please use map() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return self.map(fun)
 
     def to_conll(self):

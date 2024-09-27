@@ -59,12 +59,6 @@ class RequestItem():
     def __repr__(self):
         return f"{self.sort} {{{ ';'.join([str(x) for x in self.items]) }}}"
 
-def check(L):
-    for e in L:
-        if not isinstance(e,RequestItem):
-            return False
-    return True
-
 class Request():
     '''
     lists of ClauseList
@@ -88,11 +82,11 @@ class Request():
             if isinstance(R, Request):
                 self.items = tuple(R.items)
                 return
-        if check(L):
+        if all (isinstance(elt, RequestItem) for elt in L):
             self.items = tuple(L)
             return
         raise TypeError(f"cannot build a request out of {L}")
-        
+
     def without(self, *L):
         return Request (self.items + tuple(RequestItem("without", e) for e in L))
 
@@ -114,11 +108,6 @@ class Request():
         else:
             elts = [RequestItem.from_json(c) for c in json_data]
             return cls(*elts)
-
-    @classmethod
-    def parse(cls, string_request):
-        print ("[Request.parse is DEPRECATED] see https://grew.fr/grewpy/upgrade_0.5", file=sys.stderr)
-        return cls(string_request)
 
     @staticmethod
     def parse_request(s : str) -> List[Tuple[str,str]]:
@@ -187,7 +176,7 @@ class Add_edge(Command):
         super().__init__(f"add_edge {X}-[{s}]->{Y}")
         self.X, self.e, self.Y = X, e, Y
 
-    def safe(self):           
+    def safe(self):
         return RequestItem("without",self.item.replace("add_edge",""))
     
     def __repr__(self):
@@ -198,14 +187,19 @@ class Delete_edge(Command):
         super().__init__(f"del_edge {X}-[{e}]->{Y}")
         self.X, self.e, self.Y = X, e, Y
 
-    def safe(self):           
+    def safe(self):
         return RequestItem("pattern", self.item.replace("del_edge", ""))
     
-class Delete_feature(Command):
+class DeleteFeature(Command):
     def __init__(self, X, f):
         super().__init__(f"del_feat {X}.{f}")
         self.X = X
         self.f = f
+
+class Delete_feature(DeleteFeature):
+   def __init__(self, X, f):
+       # TODO deprecated
+       super().__init__(X, f)
 
 class Commands(list):
     def __init__(self, *L):
@@ -367,6 +361,8 @@ strat main { Onf(UD2bUD) }
     return cls
 
 @constant_UD2bUD
+
+
 class GRS:
     """
     An abstract GRS. Offers the possibility to apply rewriting.
@@ -465,5 +461,5 @@ class GRS:
             network.send_and_receive(req)
             return data if abstract else CorpusDraft (data)
         elif isinstance(data, CorpusDraft):
-            acorpus = Corpus(data)
-            self.apply(acorpus, strat, abstract)
+            corpus = Corpus(data)
+            self.apply(corpus, strat, abstract)
