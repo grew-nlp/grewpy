@@ -82,6 +82,9 @@ class Request():
             if isinstance(R, Request):
                 self.items = tuple(R.items)
                 return
+            if isinstance(R,tuple):
+                self.items = R
+                return
         if all (isinstance(elt, RequestItem) for elt in L):
             self.items = tuple(L)
             return
@@ -433,6 +436,8 @@ class GRS:
             return {sid: [Graph(s) for s in L] for sid, L in reply.items() } 
         elif isinstance(data, CorpusDraft):
             return {sid: self.run(g) for sid,g in data.items() } 
+        else:
+            raise TypeError(f"GRS method 'run' cannot bu used with {data}")
 
     def apply(self, data, strat="main", abstract=True):
         """
@@ -463,3 +468,5 @@ class GRS:
         elif isinstance(data, CorpusDraft):
             corpus = Corpus(data)
             self.apply(corpus, strat, abstract)
+        else:
+            raise TypeError(f"GRS method 'apply' cannot bu used with {data}")
