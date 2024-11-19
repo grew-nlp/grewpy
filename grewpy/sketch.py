@@ -4,10 +4,10 @@ class Sketch:
         """
         sketches are defined by a pattern P, and parameters (features, edge features, etc)
         sketch name serves for rule naming
-        Nodes X and Y have special status. 
+        Nodes X and Y have special status.
         In the following, we search for 'e : X -> Y'
         Thus, in the pattern P, X, Y, e must be used with that fact in mind.
-        cluster criterion is typically ["X.upos", "Y.upos"], but can be enlarged  
+        cluster criterion is typically ["X.upos", "Y.upos"], but can be enlarged
         """
         self.P = P
         self.cluster_criterion = cluster_criterion

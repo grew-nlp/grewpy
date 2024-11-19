@@ -60,7 +60,7 @@ class GrewWeb:
             except GrewError:
                 with open("error.grs","w") as g:
                     g.write(str(GRSDraft(grs)))
-                
+
 
 
     def load_corpus(self,   corpus):

@@ -47,7 +47,7 @@ class FsEdge(dict):
 
     def __hash__(self):
         return hash(tuple((sorted(self.items()))))
-    
+
     def __str__(self):
         return super().__repr__()
 
@@ -129,7 +129,7 @@ class Graph():
             self.features = dict(data.features)
             self._sucs = dict(data._sucs)
             self.meta = dict(data.meta)
-            self.order = list(data.order)  
+            self.order = list(data.order)
         elif data is None:
             self.features = kwargs.get("features", dict())
             self.order = kwargs.get("order", [])
@@ -139,7 +139,7 @@ class Graph():
             (features, sucs, meta, order) = Graph._from_json(data)
             self.features = features
             self.order = order
-            self.meta = meta            
+            self.meta = meta
             self._sucs = sucs
         elif isinstance(data,str):
             #either filename, json or conll
@@ -283,7 +283,7 @@ class Graph():
 
     def edges(self, n, m):
         """
-        given node n and m, 
+        given node n and m,
         return the set of edges between n and m
         """
         if n not in self._sucs:
@@ -340,4 +340,4 @@ class Graph():
             if et:
                 E2.add((m, et, n))
         return np.array([len(E1 & E2), len(E1 - E2), len(E2 - E1)])
-        
+

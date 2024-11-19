@@ -42,7 +42,7 @@ class Matchings(dict):
             sid = line["sent_id"]
             if sid not in self:
                 self[sid] = []
-            self[sid].append(Matching( line["matching"], 
+            self[sid].append(Matching( line["matching"],
             corpus[sid]))
 
     def feature_values(self, arg=None, flat=False):
@@ -52,5 +52,5 @@ class Matchings(dict):
                 observation |= m.feature_values(arg,flat)
         return observation
 
-    
+
 

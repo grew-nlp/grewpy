@@ -127,17 +127,17 @@ class Request():
 
     def json_data(self):
         return [x.json_data() for x in self.items]
-        
+
     def __str__(self):
         return "\n".join([str(e) for e in self.items])
-        
+
     def __iter__(self):
-        return iter(self.items)        
-    
+        return iter(self.items)
+
     def append(self, *L):
         """
         Append a new RequestItem to the Request
-        L is given either as a pair (s,t) with "s \\in {'pattern','without','meta'} and t : str 
+        L is given either as a pair (s,t) with "s \\in {'pattern','without','meta'} and t : str
         or L[0] is a RequestItem
         """
         if len(L) == 2:
@@ -146,7 +146,7 @@ class Request():
             self.items = self.items + L
         else:
             raise ValueError(f"cannot build a request with {L}")
-        
+
     def named_entities(self):
         req = {"command": "request_named_entities", "request": self.json_data(),}
         reply = network.send_and_receive(req)
@@ -161,7 +161,7 @@ class Command:
 
     def json_data(self):
         return self.item
-    
+
     def __str__(self):
         return str(self.item)
 
@@ -182,7 +182,7 @@ class AddEdge(Command):
 
     def safe(self):
         return RequestItem("without",self.item.replace("add_edge",""))
-    
+
     def __repr__(self):
         return str(self)
 
@@ -259,7 +259,7 @@ class Commands(list):
     @classmethod
     def from_json(cls, json_data):
         return cls(*json_data)
-    
+
     def json_data(self):
         return [x if isinstance(x,str) else x.json_data() for x in self]
 
@@ -331,7 +331,7 @@ class Package(dict):
 
 class GRSDraft(Package):
     """
-    A GRSDraft is a structure that gives access to the internals of a 
+    A GRSDraft is a structure that gives access to the internals of a
     Graph Rewriting System: packages, rules, patterns, strategies, etc
     It cannot be used to perform rewriting, for that, use a GRS
     """
@@ -361,7 +361,7 @@ class GRSDraft(Package):
 
     def safe_rules(self):
         """
-        create a new grs with application of safe to each rule. 
+        create a new grs with application of safe to each rule.
         self.rules() are supposed to contain only Commands of length 1 that support safe method
         """
         grs = GRSDraft()
@@ -377,7 +377,7 @@ class GRSDraft(Package):
     def onf(self, strat_name="main"):
         self[strat_name] = f'Onf(Alt({",".join(self.rules())}))'
         return self
-    
+
     def save(self, filename):
         with open(filename, "w") as f:
             f.write(str(self))
@@ -406,7 +406,7 @@ strat main { Onf(UD2bUD) }
 class GRS:
     """
     An abstract GRS. Offers the possibility to apply rewriting.
-    The object is abstract and cannot be changed. 
+    The object is abstract and cannot be changed.
     For that, use a GRSDraft
     """
 
@@ -435,9 +435,9 @@ class GRS:
                 raise ValueError(f"cannot build a grs with {args}\n {e.message}")
         else:
             raise ValueError(f"cannot build a grs with {args}")
-    
+
         reply = network.send_and_receive(req)
-        self.id = reply["index"]    
+        self.id = reply["index"]
 
     def json(self):
         req = {"command": "json_grs", "grs_index": self.id}
@@ -470,9 +470,9 @@ class GRS:
                 "strat": strat
             }
             reply = network.send_and_receive(req)
-            return {sid: [Graph(s) for s in L] for sid, L in reply.items() } 
+            return {sid: [Graph(s) for s in L] for sid, L in reply.items() }
         elif isinstance(data, CorpusDraft):
-            return {sid: self.run(g) for sid,g in data.items() } 
+            return {sid: self.run(g) for sid,g in data.items() }
         else:
             raise TypeError(f"GRS method 'run' cannot bu used with {data}")
 

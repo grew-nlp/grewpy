@@ -60,7 +60,7 @@ class AbstractCorpus():
 
 class CorpusDraft(AbstractCorpus,dict):
     """
-    the draft is composed of 
+    the draft is composed of
       - self, a dict mapping sentence_id to graphs
       - self._sent_ids, a list that specifies the sentence order
     """
@@ -98,7 +98,7 @@ class CorpusDraft(AbstractCorpus,dict):
 
     def map(self, fun, in_place = False):
         """
-        Apply fun to all graphs. 
+        Apply fun to all graphs.
         If in_place is False, it returns a new DraftCorpus.
         If in_place is True, the input corpus is modified, None is returned
         """
@@ -186,7 +186,7 @@ class Corpus(AbstractCorpus):
         req = {"command": "corpus_get",
                    "corpus_index": self._id, "sent_id": sent_id}
         return (Graph.from_json(network.send_and_receive(req)))
-    
+
     def __getitem__(self, data):
         """
         return a graph corresponding to data, either
