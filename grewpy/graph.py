@@ -7,6 +7,7 @@ import copy
 import tempfile
 import json
 import numpy as np
+import warnings
 
 from grewpy.grew import GrewError
 from grewpy.network import send_and_receive
@@ -26,10 +27,10 @@ from collections import OrderedDict
 sud_config = ('1', OrderedDict([('2', ':'), ('deep', '@'), ('type', '/')]))
 
 ''' interfaces'''
-class Fs_edge(dict):
+class FsEdge(dict):
     def __init__(self,data):
         if isinstance(data,str):
-            super().__init__(Fs_edge.parse(data))
+            super().__init__(FsEdge.parse(data))
         elif isinstance(data, dict):
             super().__init__(data)
         else:
@@ -51,7 +52,7 @@ class Fs_edge(dict):
         return super().__repr__()
 
     def __repr__(self):
-        return f"Fs_edge({str(self)})"
+        return f"FsEdge({str(self)})"
 
 
     def compact(self):
@@ -81,7 +82,7 @@ class Fs_edge(dict):
                     a,b = item.split("=", maxsplit=1)
                     clauses[a] = b
                 else:
-                    raise GrewError(f"Cannot build Fs_edge with data: {s}")
+                    raise GrewError(f"Cannot build FsEdge with data: {s}")
             return clauses
         else: # s is parsed following config
             clauses = dict()
@@ -91,6 +92,19 @@ class Fs_edge(dict):
                     clauses[key] = v
             clauses[sud_config[0]] = s
             return clauses
+
+class Fs_edge(FsEdge):
+    def __init__(self, X, f):
+        warnings.warn(
+            """Fs_edge is deprecated and will be removed in a future version.
+            Please use FsEdge instead.
+            See https://grew.fr/grewpy/upgrade_0.6/
+            """,
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(X, f)
+
 
 
 class Graph():
@@ -153,7 +167,7 @@ class Graph():
         for edge in data_json.get("edges", []):
             # TODO gestion des "label" implicite
             utils.map_append(sucs, edge["src"],
-                             (edge["tar"], Fs_edge(edge["label"])))
+                             (edge["tar"], FsEdge(edge["label"])))
         meta = data_json.get("meta", dict())
         order = data_json.get("order", list())
         return (features, sucs, meta, order)

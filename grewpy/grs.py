@@ -1,4 +1,5 @@
 import json
+import warnings
 import sys
 import os.path
 from typing import List, Tuple
@@ -170,7 +171,7 @@ class Command:
         """
         raise NotImplementedError ("not yet implemented")
 
-class Add_edge(Command):
+class AddEdge(Command):
     def __init__(self,X,e,Y):
         if isinstance(e, dict):
             s = ",".join(f"{k}={v}" for k,v in e.items())
@@ -185,14 +186,42 @@ class Add_edge(Command):
     def __repr__(self):
         return str(self)
 
-class Delete_edge(Command):
+
+class Add_edge(AddEdge):
+   def __init__(self, X, f):
+        warnings.warn(
+            """Add_edge is deprecated and will be removed in a future version.
+            Please use AddEdge instead.
+            See https://grew.fr/grewpy/upgrade_0.6/
+            """,
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(X, f)
+
+
+
+class DeleteEdge(Command):
     def __init__(self, X, e, Y):
         super().__init__(f"del_edge {X}-[{e}]->{Y}")
         self.X, self.e, self.Y = X, e, Y
 
     def safe(self):
         return RequestItem("pattern", self.item.replace("del_edge", ""))
-    
+
+class Delete_edge(DeleteEdge):
+   def __init__(self, X, f):
+        warnings.warn(
+            """Delete_edge is deprecated and will be removed in a future version.
+            Please use DeleteEdge instead.
+            See https://grew.fr/grewpy/upgrade_0.6/
+            """,
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(X, f)
+
+
 class DeleteFeature(Command):
     def __init__(self, X, f):
         super().__init__(f"del_feat {X}.{f}")
@@ -201,8 +230,16 @@ class DeleteFeature(Command):
 
 class Delete_feature(DeleteFeature):
    def __init__(self, X, f):
-       # TODO deprecated
-       super().__init__(X, f)
+        warnings.warn(
+            """Delete_feature is deprecated and will be removed in a future version.
+            Please use DeleteFeature instead.
+            See https://grew.fr/grewpy/upgrade_0.6/
+            """,
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(X, f)
+        super().__init__(X, f)
 
 class Commands(list):
     def __init__(self, *L):

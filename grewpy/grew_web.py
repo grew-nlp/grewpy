@@ -5,6 +5,8 @@ import requests
 import webbrowser
 import http
 import json
+import warnings
+
 from .grew import GrewError
 from grewpy import GRSDraft
 
@@ -34,7 +36,7 @@ def _post_request(service, resp):
     raise GrewError({"UNEXPECTED": service, "message": data})
 
 
-class Grew_web:
+class GrewWeb:
     """
     web-connection to grew
     """
@@ -82,3 +84,15 @@ class Grew_web:
 
     def open(self):
         webbrowser.open (self.url())
+
+class Grew_web(GrewWeb):
+   def __init__(self, X, f):
+        warnings.warn(
+            """Grew_web is deprecated and will be removed in a future version.
+            Please use GrewWeb instead.
+            See https://grew.fr/grewpy/upgrade_0.6/
+            """,
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(X, f)
