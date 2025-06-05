@@ -17,11 +17,9 @@ import numpy as np
 from .network import send_and_receive
 from .graph import Graph
 from .grew import GrewError
-from .observation import Observation
+from .utils import flatten_dict_keys
 
 from . import network
-
-from .matchings import Matchings
 
 class AbstractCorpus():
     def edge_diff(self, other, edge_criterion=lambda e: True):
@@ -212,7 +210,7 @@ class Corpus(AbstractCorpus):
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_parameter=[], clustering_keys=[], flat=None, deco=False, bound=None, timeout=None):
+    def search(self, request, clustering_keys=[], flat=False, deco=False, bound=None, timeout=None):
         """
         Search for [request] into [corpus_index]
 
@@ -227,36 +225,32 @@ class Corpus(AbstractCorpus):
             "command": "corpus_search",
             "corpus_index": self._id,
             "request": request.json_data(),
-            "clustering_keys": clustering_parameter + clustering_keys,
+            "clustering_keys": clustering_keys,
             "build_deco": deco,
             "bound": bound,
             "timeout": timeout,
         })
-        if flat == "matchings":
-            return Matchings(res, self)
-        elif flat == "observations" and clustering_parameter or clustering_keys:
-            return Observation(res, clustering_parameter, clustering_keys)
+        if flat:
+            return flatten_dict_keys(res)
         return res
 
-    def count(self, request, clustering_parameter=[], clustering_keys=[], flat=False):
+    def count(self, request, clustering_keys=[], flat=False):
         """
         Count for [request] into [corpus_index]
         :param request: a string request
-        :param corpus_index: an integer given by the [corpus] function
+        :param clustering key: a collection of features/keys
         :return: the number of matching of [request] into the corpus
         """
         res = network.send_and_receive({
             "command": "corpus_count",
             "corpus_index": self._id,
             "request": request.json_data(),
-            "clustering_keys": clustering_parameter + clustering_keys,
+            "clustering_keys": clustering_keys,
         })
-        if not flat:
-            return res
-        if clustering_parameter or clustering_keys:
-            return Observation(obs=res,parameter=clustering_parameter, keys=clustering_keys)
+        if flat:
+            return flatten_dict_keys(res)
         return res
-
+        
     def __len__(self):
         return self._length
 
