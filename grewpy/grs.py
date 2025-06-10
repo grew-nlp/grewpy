@@ -106,9 +106,9 @@ class Request():
     @classmethod
     def from_json(cls,json_data):
         if isinstance(json_data,str):
-            return cls.parse(json_data)
+            return cls(json_data)
         if len(json_data) > 0 and isinstance(json_data[0], str):
-            return cls.parse("\n".join(json_data))
+            return cls("\n".join(json_data))
         else:
             elts = [RequestItem.from_json(c) for c in json_data]
             return cls(*elts)
