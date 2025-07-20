@@ -210,13 +210,12 @@ class Corpus(AbstractCorpus):
         return {sid: Graph.from_json(json_data) for (sid,json_data) in dico.items() }
 
 
-    def search(self, request, clustering_keys=[], flat=False, deco=False, bound=None, timeout=None):
+    def search(self, request, clustering_keys=[], flat=True, deco=False, bound=None, timeout=None):
         """
-        Search for [request] into [corpus_index]
+        Search for [request] in the corpus
 
         Parameters:
         request (Request): a request
-        corpus_index: an integer given by the [corpus] function
 
         Returns:
         list: the list of matching of [request] into the corpus
@@ -234,7 +233,7 @@ class Corpus(AbstractCorpus):
             return flatten_dict_keys(res)
         return res
 
-    def count(self, request, clustering_keys=[], flat=False):
+    def count(self, request, clustering_keys=[], flat=True):
         """
         Count for [request] into [corpus_index]
         :param request: a string request
