@@ -229,7 +229,7 @@ class Corpus(AbstractCorpus):
             "bound": bound,
             "timeout": timeout,
         })
-        if flat:
+        if flat and len(clustering_keys > 1):
             return flatten_dict_keys(res)
         return res
 
@@ -246,7 +246,7 @@ class Corpus(AbstractCorpus):
             "request": request.json_data(),
             "clustering_keys": clustering_keys,
         })
-        if flat:
+        if flat and len(clustering_keys > 1):
             return flatten_dict_keys(res)
         return res
         
