@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grewpy"
+version = "0.7.1"
+readme = "README.md"
+description = "A binding to the Grew software"
+authors = [{name = "bguil", email = "Bruno.Guillaume@loria.fr"}]
+license = {file = "LICENSE/Licence_CeCILL_V2.1-en.txt"}
+dependencies = ["numpy", "lark"]
+
+[project.urls]
+Homepage = "https://grew.fr/usage/python/"
+
+[tool.setuptools]
+packages = ["grewpy", "examples"]
