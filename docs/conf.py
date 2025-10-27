@@ -19,12 +19,12 @@ sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'grewpy 0.7.0'
+project = 'grewpy 0.7.1'
 copyright = '2024, GB and BG'
 author = 'GB and BG'
 
 # The short X.Y version
-version = '0.7.0'
+version = '0.7.1'
 # The full version, including alpha/beta/rc tags
 release = ''
 
