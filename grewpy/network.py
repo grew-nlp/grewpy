@@ -14,7 +14,7 @@ host = 'localhost'
 port = None
 remote_ip = ''
 caml_pid = None
-minimal_grewpy_backend_version = "0.5.4"
+minimal_grewpy_backend_version = "0.6.0"
 
 request_counter = 0 #number of request to caml
 
